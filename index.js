@@ -21,7 +21,8 @@ const corsOptions = {
       "https://apiv2.fintolite.com",
       "https://fintolite.com",
       "https://test.urbanrwa.io",
-      "http://localhost:5173",      
+      "http://localhost:5173",
+      "https://web.telegram.org/",      
       "*"
     ];
     if (!origin || allowedOrigins.includes(origin)) {
