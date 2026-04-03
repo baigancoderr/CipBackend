@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style type="text/css">
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: linear-gradient(135deg, #2846E7, #0066cc); color: #333; }
+    .container { max-width: 600px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); perspective: 1000px; }
+    .card { position: relative; transform: perspective(500px) rotateX(10deg); transition: transform 0.3s; }
+    .card:hover { transform: perspective(500px) rotateX(0deg); }
+    .header { text-align: center; padding: 10px; background: linear-gradient(45deg, #2846E7, #0066cc); color: #fff; border-radius: 5px 5px 0 0; }
+    .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
+    .content { padding: 20px; text-align: center; }
+    .otp-box { background: #f0f0f0; padding: 15px; border-radius: 5px; display: inline-block; font-size: 24px; font-weight: bold; color: #0066cc; transition: transform 0.3s, box-shadow 0.3s; }
+    .otp-box:hover { transform: scale(1.1) rotateY(10deg); box-shadow: 0 5px 15px rgba(0, 102, 204, 0.5); }
+    .footer { text-align: center; padding: 10px; font-size: 12px; color: #666; }
+    .coin { width: 20px; height: 20px; background: radial-gradient(circle, #ffd700 30%, #ccc 70%); border-radius: 50%; display: inline-block; margin-right: 5px; position: relative; top: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{projectName}}</h1>
+      <span class="coin"></span> Welcome to Urban RWA
+    </div>
+    <div class="card content">
+      <p>Thank you for registering with {{projectName}}! To complete your account verification, please use the following One-Time Password (OTP):</p>
+      <div class="otp-box">[OTP]</div>
+      <p>This OTP is valid for 10 minutes.</p>
+      <p>If you did not request this, please ignore this email or contact support at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+    </div>
+    <div class="footer">
+      Best regards,<br>The {{projectName}} Team
+    </div>
+  </div>
+</body>
+</html>

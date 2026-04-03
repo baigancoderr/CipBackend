@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style type="text/css">
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; background: linear-gradient(135deg, #2846E7, #0066cc); color: #333; }
+    .container { max-width: 600px; margin: 20px auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); perspective: 1000px; }
+    .card { position: relative; transform: perspective(500px) rotateX(10deg); transition: transform 0.3s; }
+    .card:hover { transform: perspective(500px) rotateX(0deg); }
+    .header { text-align: center; padding: 10px; background: linear-gradient(45deg, #2846E7, #0066cc); color: #fff; border-radius: 5px 5px 0 0; }
+    .header h1 { margin: 0; font-size: 24px; text-transform: uppercase; }
+    .content { padding: 20px; text-align: center; }
+    .details-box { background: #f0f0f0; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
+    .details-box p { margin: 5px 0; font-weight: bold; color: #0066cc; }
+    .footer { text-align: center; padding: 10px; font-size: 12px; color: #666; }
+    .coin { width: 20px; height: 20px; background: radial-gradient(circle, #ffd700 30%, #ccc 70%); border-radius: 50%; display: inline-block; margin-right: 5px; position: relative; top: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{projectName}}</h1>
+      <span class="coin"></span> Account Created Successfully
+    </div>
+    <div class="card content">
+      <p>Thank you for registering with {{projectName}}! Your account has been created successfully. Below are your login credentials:</p>
+      <div class="details-box">
+        <p><strong>User ID:</strong> {{user_id}}</p>
+        <p><strong>Password:</strong> {{password}}</p>
+      </div>
+      <p>For security reasons, we recommend changing your password immediately after logging in.</p>
+      <p>If you did not create this account, please contact support at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+    </div>
+    <div class="footer">
+      Best regards,<br>The {{projectName}} Team
+    </div>
+  </div>
+</body>
+</html>

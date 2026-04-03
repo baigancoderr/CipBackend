@@ -1,0 +1,13 @@
+[0;1;31m×[0m mongod.service - MongoDB Database Server
+     Loaded: loaded (/lib/systemd/system/mongod.service; enabled; vendor preset: enabled)
+     Active: [0;1;31mfailed[0m (Result: exit-code) since Wed 2025-08-27 16:06:04 UTC; 2min 9s ago
+       Docs: https://docs.mongodb.org/manual
+    Process: 22729 ExecStart=/usr/bin/mongod --config /etc/mongod.conf [0;1;31m(code=exited, status=2)[0m
+   Main PID: 22729 (code=exited, status=2)
+        CPU: 36ms
+
+Aug 27 16:06:04 srv976411 systemd[1]: Started MongoDB Database Server.
+Aug 27 16:06:04 srv976411 mongod[22729]: Error parsing YAML config file: yaml-cpp: error at line 9, column 43: illegal map value
+Aug 27 16:06:04 srv976411 mongod[22729]: try '/usr/bin/mongod --help' for more information
+Aug 27 16:06:04 srv976411 systemd[1]: [0;1;39m[0;1;31m[0;1;39mmongod.service: Main process exited, code=exited, status=2/INVALIDARGUMENT[0m
+Aug 27 16:06:04 srv976411 systemd[1]: [0;1;38;5;185m[0;1;39m[0;1;38;5;185mmongod.service: Failed with result 'exit-code'.[0m
