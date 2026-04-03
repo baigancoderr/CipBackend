@@ -16,14 +16,16 @@ app.use(express.urlencoded({ extended: true }));
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
-       "https://urbanrwa.io",
-      "https://backendapi.urbanrwa.io",
-      "https://apiv2.fintolite.com",
-      "https://fintolite.com",
-      "https://test.urbanrwa.io",
-      "http://localhost:5173",
-      "https://web.telegram.org/",      
-      "*"
+    
+       "http://localhost:5173",
+      "https://web.telegram.org",
+
+      "https://t.me/cipera_bot/direct",
+      "https://t.me/cipera_bot",
+      "https://t.me",
+
+      "https://mini-app-jgm4.vercel.app"     
+     
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
