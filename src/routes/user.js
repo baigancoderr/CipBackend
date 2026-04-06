@@ -79,7 +79,7 @@ router.post("/CreateInvestment", CreateInvestment);
 router.post('/deposit/qr', authMiddleware(['user']), createQrDeposit);
 
 // Public callback route (Fintolite will call this)
-router.post('/deposit/callback', paymentCallback);
+// router.post('/deposit/callback', paymentCallback);
 
 router.post("/request-withdrawal-otp", authMiddleware(["user"]), requestWithdrawalOtp);
 router.post("/withdraw", authMiddleware(["user"]), withdraw);
@@ -169,9 +169,6 @@ router.post("/logout", authMiddleware(["user"]), logout);
 router.post("/deposit/create", createDeposit);
 
 // 🔁 Callback (IMPORTANT)
-router.post("/deposit/callback", (req, res) => {
-  console.log("BODY:", req.body);
-  res.json(req.body);
-});
+router.post("/deposit/callback", depositCallback);
 
 module.exports = router;
