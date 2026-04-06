@@ -1530,144 +1530,270 @@ const getDirectTeam = async (req, res) => {
 };
 
 // Get Indirect Team API
+// const getIndirectTeam = async (req, res) => {
+//   try {
+//     const { startDate, endDate, page = 1, limit = 10, level } = req.query;
+//     const user = await User.findById(req.user.id).select(
+//       "referralCode totalSelfInvestment",
+//     );
+//     if (!user) {
+//       return res.status(404).json(errorResponse("User not found"));
+//     }
+
+//     // Fetch direct referrals to start building the indirect team
+//     const directReferrals = await User.find({ referredBy: user.referralCode })
+//       .select("referralCode")
+//       .lean();
+
+//     if (!directReferrals.length) {
+//       return res.status(404).json(errorResponse("No direct referrals found"));
+//     }
+
+//     // Recursive function to fetch indirect team
+//     const getIndirectTeamRecursively = async (
+//       referralCodes,
+//       currentLevel = 1,
+//       levelData = {},
+//     ) => {
+//       if (!referralCodes.length) return levelData;
+
+//       const users = await User.find({
+//         referredBy: { $in: referralCodes },
+//       })
+//         .populate("package", "name investment")
+//         .lean();
+
+//       if (!users.length) return levelData;
+
+//       if (!levelData[currentLevel]) {
+//         levelData[currentLevel] = [];
+//       }
+
+//       const nextLevelReferralCodes = [];
+//       for (const u of users) {
+//         levelData[currentLevel].push({
+//           id: u._id,
+//           userName: u.username || u.email.split("@")[0],
+//           email: u.email,
+//           plan: u.package?.name || "N/A",
+//           selfInvestment: u.totalSelfInvestment || 0,
+//           teamInvestment: await calculateDownlineInvestment(u.referralCode),
+//           joinDate: u.createdAt,
+//         });
+//         nextLevelReferralCodes.push(u.referralCode);
+//       }
+
+//       // Recursively fetch next level
+//       await getIndirectTeamRecursively(
+//         nextLevelReferralCodes,
+//         currentLevel + 1,
+//         levelData,
+//       );
+//       return levelData;
+//     };
+
+//     // Fetch indirect team data
+//     let indirectTeamData = await getIndirectTeamRecursively(
+//       directReferrals.map((u) => u.referralCode),
+//       1,
+//     );
+
+//     // Filter by specific level if provided
+//     if (level) {
+//       const targetLevel = parseInt(level, 10);
+//       if (targetLevel < 1) {
+//         return res.status(400).json(errorResponse("Level must be at least 1"));
+//       }
+//       indirectTeamData = { [targetLevel]: indirectTeamData[targetLevel] || [] };
+//     }
+
+//     // Apply date filtering
+//     if (startDate || endDate) {
+//       const start = startDate
+//         ? moment(startDate).startOf("day").toDate()
+//         : null;
+//       const end = endDate ? moment(endDate).endOf("day").toDate() : null;
+//       for (const lvl in indirectTeamData) {
+//         indirectTeamData[lvl] = indirectTeamData[lvl].filter((user) => {
+//           const joinDate = new Date(user.joinDate);
+//           return (!start || joinDate >= start) && (!end || joinDate <= end);
+//         });
+//       }
+//     }
+
+//     // Apply pagination
+//     const pageNum = parseInt(page, 10);
+//     const limitNum = parseInt(limit, 10);
+//     const skip = (pageNum - 1) * limitNum;
+
+//     // Flatten data for pagination
+//     const allIndirectUsers = Object.values(indirectTeamData)
+//       .flat()
+//       .sort((a, b) => new Date(b.joinDate) - new Date(a.joinDate));
+
+//     const totalIndirectUsers = allIndirectUsers.length;
+//     const paginatedIndirectUsers = allIndirectUsers.slice(
+//       skip,
+//       skip + limitNum,
+//     );
+
+//     // Add serial numbers
+//     const indirectTeam = paginatedIndirectUsers.map((user, index) => ({
+//       sr: skip + index + 1,
+//       ...user,
+//     }));
+
+//     // Calculate total team investment
+//     const teamInvestment = await calculateDownlineInvestment(user.referralCode);
+
+//     if (!indirectTeam.length) {
+//       return res
+//         .status(404)
+//         .json(errorResponse("No indirect team members found"));
+//     }
+
+//     res.status(200).json(
+//       successResponse("Indirect team retrieved successfully", {
+//         selfInvestment: user.totalSelfInvestment || 0,
+//         teamInvestment,
+//         indirectTeam,
+//         pagination: {
+//           total: totalIndirectUsers,
+//           page: pageNum,
+//           limit: limitNum,
+//           totalPages: Math.ceil(totalIndirectUsers / limitNum),
+//         },
+//       }),
+//     );
+//   } catch (error) {
+//     console.error("Error fetching indirect team:", error);
+//     res.status(500).json(errorResponse(error.message));
+//   }
+// };
+
 const getIndirectTeam = async (req, res) => {
   try {
-    const { startDate, endDate, page = 1, limit = 10, level } = req.query;
+    const { page = 1, limit = 10, level } = req.query;
+
+    // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalSelfInvestment",
+      "referralCode totalInvested"
     );
+
     if (!user) {
-      return res.status(404).json(errorResponse("User not found"));
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+      });
     }
 
-    // Fetch direct referrals to start building the indirect team
-    const directReferrals = await User.find({ referredBy: user.referralCode })
-      .select("referralCode")
-      .lean();
-
-    if (!directReferrals.length) {
-      return res.status(404).json(errorResponse("No direct referrals found"));
-    }
-
-    // Recursive function to fetch indirect team
-    const getIndirectTeamRecursively = async (
-      referralCodes,
-      currentLevel = 1,
-      levelData = {},
-    ) => {
-      if (!referralCodes.length) return levelData;
-
-      const users = await User.find({
-        referredBy: { $in: referralCodes },
-      })
-        .populate("package", "name investment")
-        .lean();
-
-      if (!users.length) return levelData;
-
-      if (!levelData[currentLevel]) {
-        levelData[currentLevel] = [];
-      }
-
-      const nextLevelReferralCodes = [];
-      for (const u of users) {
-        levelData[currentLevel].push({
-          id: u._id,
-          userName: u.username || u.email.split("@")[0],
-          email: u.email,
-          plan: u.package?.name || "N/A",
-          selfInvestment: u.totalSelfInvestment || 0,
-          teamInvestment: await calculateDownlineInvestment(u.referralCode),
-          joinDate: u.createdAt,
-        });
-        nextLevelReferralCodes.push(u.referralCode);
-      }
-
-      // Recursively fetch next level
-      await getIndirectTeamRecursively(
-        nextLevelReferralCodes,
-        currentLevel + 1,
-        levelData,
-      );
-      return levelData;
-    };
-
-    // Fetch indirect team data
-    let indirectTeamData = await getIndirectTeamRecursively(
-      directReferrals.map((u) => u.referralCode),
-      1,
-    );
-
-    // Filter by specific level if provided
-    if (level) {
-      const targetLevel = parseInt(level, 10);
-      if (targetLevel < 1) {
-        return res.status(400).json(errorResponse("Level must be at least 1"));
-      }
-      indirectTeamData = { [targetLevel]: indirectTeamData[targetLevel] || [] };
-    }
-
-    // Apply date filtering
-    if (startDate || endDate) {
-      const start = startDate
-        ? moment(startDate).startOf("day").toDate()
-        : null;
-      const end = endDate ? moment(endDate).endOf("day").toDate() : null;
-      for (const lvl in indirectTeamData) {
-        indirectTeamData[lvl] = indirectTeamData[lvl].filter((user) => {
-          const joinDate = new Date(user.joinDate);
-          return (!start || joinDate >= start) && (!end || joinDate <= end);
-        });
-      }
-    }
-
-    // Apply pagination
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // Flatten data for pagination
-    const allIndirectUsers = Object.values(indirectTeamData)
-      .flat()
-      .sort((a, b) => new Date(b.joinDate) - new Date(a.joinDate));
+    // 🔥 Step 1: Get direct referrals
+    const directReferrals = await User.find({
+      referredBy: user.referralCode,
+    }).select("referralCode");
 
-    const totalIndirectUsers = allIndirectUsers.length;
-    const paginatedIndirectUsers = allIndirectUsers.slice(
-      skip,
-      skip + limitNum,
-    );
-
-    // Add serial numbers
-    const indirectTeam = paginatedIndirectUsers.map((user, index) => ({
-      sr: skip + index + 1,
-      ...user,
-    }));
-
-    // Calculate total team investment
-    const teamInvestment = await calculateDownlineInvestment(user.referralCode);
-
-    if (!indirectTeam.length) {
-      return res
-        .status(404)
-        .json(errorResponse("No indirect team members found"));
+    if (!directReferrals.length) {
+      return res.status(200).json({
+        status: "success",
+        message: "No indirect team found",
+        data: {
+          selfInvestment: user.totalInvested || 0,
+          indirectTeam: [],
+          pagination: {
+            total: 0,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: 0,
+          },
+        },
+      });
     }
 
-    res.status(200).json(
-      successResponse("Indirect team retrieved successfully", {
-        selfInvestment: user.totalSelfInvestment || 0,
-        teamInvestment,
+    // 🔁 Recursive fetch
+    const getDownline = async (codes, currentLevel = 1, result = []) => {
+      if (!codes.length) return result;
+
+      const users = await User.find({
+        referredBy: { $in: codes },
+      }).lean();
+
+      if (!users.length) return result;
+
+      let nextCodes = [];
+
+      for (let u of users) {
+        result.push({
+          ...u,
+          level: currentLevel,
+        });
+        nextCodes.push(u.referralCode);
+      }
+
+      return getDownline(nextCodes, currentLevel + 1, result);
+    };
+
+    let allIndirectUsers = await getDownline(
+      directReferrals.map((u) => u.referralCode)
+    );
+
+    // 🎯 Filter by level (optional)
+    if (level) {
+      const lvl = parseInt(level);
+      allIndirectUsers = allIndirectUsers.filter(
+        (u) => u.level === lvl
+      );
+    }
+
+    // 📊 Sort latest first
+    allIndirectUsers.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    const total = allIndirectUsers.length;
+
+    // 📄 Pagination
+    const paginated = allIndirectUsers.slice(skip, skip + limitNum);
+
+    // 🧾 Format like direct team
+    const indirectTeam = paginated.map((u, index) => ({
+      sr: skip + index + 1,
+      id: u._id,
+      name: u.name,
+      username: u.username,
+      userId: u.userId,
+      referralCode: u.referralCode,
+      walletBalance: u.walletBalance,
+      totalInvested: u.totalInvested,
+      totalReferrals: u.totalReferrals,
+      isActive: u.isActive,
+      joinDate: u.createdAt,
+      level: u.level, // 🔥 important
+    }));
+
+    return res.status(200).json({
+      status: "success",
+      message: "Indirect team fetched successfully",
+      data: {
+        selfInvestment: user.totalInvested || 0,
         indirectTeam,
         pagination: {
-          total: totalIndirectUsers,
+          total,
           page: pageNum,
           limit: limitNum,
-          totalPages: Math.ceil(totalIndirectUsers / limitNum),
+          totalPages: Math.ceil(total / limitNum),
         },
-      }),
-    );
+      },
+    });
   } catch (error) {
-    console.error("Error fetching indirect team:", error);
-    res.status(500).json(errorResponse(error.message));
+    console.error("Indirect Team Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
