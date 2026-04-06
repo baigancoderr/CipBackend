@@ -1377,84 +1377,155 @@ const getLevelWiseIncome = async (req, res) => {
 };
 
 // Get Direct Team API
+// const getDirectTeam = async (req, res) => {
+//   try {
+//     const { startDate, endDate, page = 1, limit = 10, level } = req.query;
+//     const user = await User.findById(req.user.id).select(
+//       "referralCode totalSelfInvestment",
+//     );
+//     if (!user) {
+//       return res.status(404).json(errorResponse("User not found"));
+//     }
+
+//     // Validate level parameter (direct team is typically level 1)
+//     const targetLevel = level ? parseInt(level, 10) : 1;
+//     if (targetLevel !== 1) {
+//       return res
+//         .status(400)
+//         .json(errorResponse("Direct team is only available for level 1"));
+//     }
+
+//     // Build query for direct referrals
+//     const query = { referredBy: user.referralCode };
+//     if (startDate || endDate) {
+//       query.createdAt = {};
+//       if (startDate)
+//         query.createdAt.$gte = moment(startDate).startOf("day").toDate();
+//       if (endDate) query.createdAt.$lte = moment(endDate).endOf("day").toDate();
+//     }
+
+//     // Calculate pagination
+//     const pageNum = parseInt(page, 10);
+//     const limitNum = parseInt(limit, 10);
+//     const skip = (pageNum - 1) * limitNum;
+
+//     // Fetch direct referrals with pagination
+//     const directReferrals = await User.find(query)
+//       .populate("package", "name investment")
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limitNum)
+//       .lean();
+
+//     // Fetch total count for pagination
+//     const totalDirectReferrals = await User.countDocuments(query);
+
+//     // Map direct referrals to include additional details
+//     const directTeam = await Promise.all(
+//       directReferrals.map(async (u, index) => {
+//         const teamInvestment = await calculateDownlineInvestment(
+//           u.referralCode,
+//         );
+//         return {
+//           sr: skip + index + 1, // Serial number for pagination
+//           id: u._id,
+//           userName: u.username || u.email.split("@")[0],
+//           email: u.email,
+//           level: 1, // Direct referrals are always level 1
+//           plan: u.package?.name || "N/A",
+//           selfInvestment: u.totalSelfInvestment || 0,
+//           teamInvestment,
+//           joinDate: u.createdAt,
+//         };
+//       }),
+//     );
+
+//     res.status(200).json(
+//       successResponse("Direct team retrieved successfully", {
+//         selfInvestment: user.totalSelfInvestment || 0,
+//         directTeam,
+//         pagination: {
+//           total: totalDirectReferrals,
+//           page: pageNum,
+//           limit: limitNum,
+//           totalPages: Math.ceil(totalDirectReferrals / limitNum),
+//         },
+//       }),
+//     );
+//   } catch (error) {
+//     console.error("Error fetching direct team:", error);
+//     res.status(500).json(errorResponse(error.message));
+//   }
+// };
+
+
 const getDirectTeam = async (req, res) => {
   try {
-    const { startDate, endDate, page = 1, limit = 10, level } = req.query;
+    const { page = 1, limit = 10 } = req.query;
+
+    // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalSelfInvestment",
+      "referralCode totalInvested"
     );
+
     if (!user) {
-      return res.status(404).json(errorResponse("User not found"));
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+      });
     }
 
-    // Validate level parameter (direct team is typically level 1)
-    const targetLevel = level ? parseInt(level, 10) : 1;
-    if (targetLevel !== 1) {
-      return res
-        .status(400)
-        .json(errorResponse("Direct team is only available for level 1"));
-    }
-
-    // Build query for direct referrals
-    const query = { referredBy: user.referralCode };
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate)
-        query.createdAt.$gte = moment(startDate).startOf("day").toDate();
-      if (endDate) query.createdAt.$lte = moment(endDate).endOf("day").toDate();
-    }
-
-    // Calculate pagination
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    // 📄 Pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // Fetch direct referrals with pagination
-    const directReferrals = await User.find(query)
-      .populate("package", "name investment")
+    // 👇 Direct referrals only
+    const query = { referredBy: user.referralCode };
+
+    const directUsers = await User.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean();
 
-    // Fetch total count for pagination
-    const totalDirectReferrals = await User.countDocuments(query);
+    const total = await User.countDocuments(query);
 
-    // Map direct referrals to include additional details
-    const directTeam = await Promise.all(
-      directReferrals.map(async (u, index) => {
-        const teamInvestment = await calculateDownlineInvestment(
-          u.referralCode,
-        );
-        return {
-          sr: skip + index + 1, // Serial number for pagination
-          id: u._id,
-          userName: u.username || u.email.split("@")[0],
-          email: u.email,
-          level: 1, // Direct referrals are always level 1
-          plan: u.package?.name || "N/A",
-          selfInvestment: u.totalSelfInvestment || 0,
-          teamInvestment,
-          joinDate: u.createdAt,
-        };
-      }),
-    );
+    // 🧾 Format response
+    const directTeam = directUsers.map((u, index) => ({
+      sr: skip + index + 1,
+      id: u._id,
+      name: u.name,
+      username: u.username,
+      userId: u.userId,
+      referralCode: u.referralCode,
+      walletBalance: u.walletBalance,
+      totalInvested: u.totalInvested,
+      totalReferrals: u.totalReferrals,
+      isActive: u.isActive,
+      joinDate: u.createdAt,
+    }));
 
-    res.status(200).json(
-      successResponse("Direct team retrieved successfully", {
-        selfInvestment: user.totalSelfInvestment || 0,
+    return res.status(200).json({
+      status: "success",
+      message: "Direct team fetched successfully",
+      data: {
+        selfInvestment: user.totalInvested || 0,
         directTeam,
         pagination: {
-          total: totalDirectReferrals,
+          total,
           page: pageNum,
           limit: limitNum,
-          totalPages: Math.ceil(totalDirectReferrals / limitNum),
+          totalPages: Math.ceil(total / limitNum),
         },
-      }),
-    );
+      },
+    });
   } catch (error) {
-    console.error("Error fetching direct team:", error);
-    res.status(500).json(errorResponse(error.message));
+    console.error("Direct Team Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
 
