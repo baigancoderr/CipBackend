@@ -2390,42 +2390,108 @@ const logout = async (req, res) => {
 
 
 
+// const createDeposit = async (req, res) => {
+//   try {
+//     const { userId, amount } = req.body;
+
+//     const user = await User.findOne({ userId });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+
+//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
+
+//     const walletAddress = process.env.USDT_TRON_WALLET; 
+//     // 👆 YOUR OWN RECEIVING WALLET
+
+//     const url = `https://api.cryptapi.io/trc20/usdt/create/`;
+
+//     const response = await axios.get(url, {
+//       params: {
+//         address: walletAddress,
+//         callback: callbackUrl,
+//         order_id: userId,
+//       },
+//     });
+
+//     return res.json({
+//       success: true,
+//       data: response.data,
+//     });
+
+//   } catch (error) {
+//     console.log("CryptAPI Error:", error.response?.data || error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       error: error.response?.data,
+//     });
+//   }
+// };
+
+
 const createDeposit = async (req, res) => {
   try {
-    const { userId, amount } = req.body;
+    const { userId, amount, coin, network } = req.body;   // network ko bhi accept kar rahe hain
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "userId is required" 
+      });
+    }
 
     const user = await User.findOne({ userId });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
+    }
 
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
 
-    const walletAddress = process.env.USDT_TRON_WALLET; 
-    // 👆 YOUR OWN RECEIVING WALLET
+    // ✅ BEP20 USDT ke liye dedicated wallet (environment variable mein set karo)
+    const walletAddress = process.env.USDT_BEP20_WALLET; 
 
-    const url = `https://api.cryptapi.io/trc20/usdt/create/`;
+    if (!walletAddress) {
+      return res.status(500).json({
+        success: false,
+        message: "BEP20 wallet address not configured"
+      });
+    }
+
+    // BEP20 USDT endpoint
+    const url = `https://api.cryptapi.io/bep20/usdt/create/`;
 
     const response = await axios.get(url, {
       params: {
-        address: walletAddress,
+        address: walletAddress,      // Aapka receiving BEP20 wallet
         callback: callbackUrl,
         order_id: userId,
+        // Extra parameters (optional but recommended)
+        // multi_token: 1,           // Agar multiple tokens support karna hai to enable kar sakte ho
       },
     });
 
+    console.log("CryptAPI BEP20 Response:", response.data);
+
     return res.json({
       success: true,
-      data: response.data,
+      data: response.data,        // yahan address_in, etc. milega
+      network: "BEP20",
+      coin: "USDT"
     });
 
   } catch (error) {
-    console.log("CryptAPI Error:", error.response?.data || error.message);
+    console.error("CryptAPI BEP20 Error:", error.response?.data || error.message);
 
     return res.status(500).json({
       success: false,
-      error: error.response?.data,
+      message: "Failed to generate deposit address",
+      error: error.response?.data || error.message
     });
   }
 };
+
 
 const depositCallback = async (req, res) => {
   try {
