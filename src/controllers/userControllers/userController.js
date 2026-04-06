@@ -2405,11 +2405,11 @@ const logout = async (req, res) => {
 //   }
 // };
 
-
 const createDeposit = async (req, res) => {
   try {
     const { userId, amount, coin, network } = req.body;
 
+    // 🔐 1. Validate input
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -2425,12 +2425,13 @@ const createDeposit = async (req, res) => {
       });
     }
 
+    // 🔗 2. Callback URL with secret
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
 
     let walletAddress;
     let url;
 
-    // 🔥 Dynamic network handling
+    // 🌐 3. Network handling
     if (network === "BEP20") {
       walletAddress = process.env.USDT_BEP20_WALLET;
       url = "https://api.cryptapi.io/bep20/usdt/create/";
@@ -2444,6 +2445,14 @@ const createDeposit = async (req, res) => {
       });
     }
 
+    if (!walletAddress) {
+      return res.status(500).json({
+        success: false,
+        message: "Wallet address not configured"
+      });
+    }
+
+    // 🚀 4. Call CryptAPI
     const response = await axios.get(url, {
       params: {
         address: walletAddress,
@@ -2452,10 +2461,9 @@ const createDeposit = async (req, res) => {
       },
     });
 
-    // ✅ Save deposit
+    // 💾 5. Save deposit in DB
     const newDeposit = await Deposit.create({
-      // userId: user._id,
-      user_id: user._id, 
+      userId: user._id,   // ✅ FIXED (IMPORTANT)
       depositAddress: response.data.address_in,
       amount: amount || 0,
       coin: coin || "USDT",
@@ -2488,7 +2496,6 @@ const depositCallback = async (req, res) => {
     console.log("🔔 Callback Query:", req.query);
     console.log("🔔 Callback Body:", req.body);
 
-    // ✅ CryptAPI data (body + query mix)
     const { address_in, value, txid, confirmations } = req.body;
     const { secret } = req.query;
 
@@ -2504,13 +2511,13 @@ const depositCallback = async (req, res) => {
       return res.send("Invalid amount");
     }
 
-    // ⛓️ 3. Optional: confirmations check (recommended)
+    // ⛓️ 3. Confirmations check
     if (confirmations && confirmations < 1) {
       console.log("⏳ Waiting for confirmations...");
       return res.send("Waiting for confirmations");
     }
 
-    // 🔁 4. Prevent double credit (atomic update)
+    // 🔁 4. Prevent duplicate processing
     const deposit = await Deposit.findOneAndUpdate(
       { depositAddress: address_in, status: "pending" },
       {
@@ -2526,7 +2533,7 @@ const depositCallback = async (req, res) => {
       return res.send("Already processed or invalid");
     }
 
-    // 👤 5. Credit user wallet
+    // 👤 5. Get user
     const user = await User.findById(deposit.userId);
 
     if (!user) {
@@ -2534,6 +2541,7 @@ const depositCallback = async (req, res) => {
       return res.send("User not found");
     }
 
+    // 💰 6. Credit wallet
     user.wallet += parseFloat(value);
     await user.save();
 
@@ -2543,7 +2551,7 @@ const depositCallback = async (req, res) => {
       txid,
     });
 
-    // ✅ MUST return "OK"
+    // ✅ MUST return OK
     return res.send("OK");
 
   } catch (err) {
