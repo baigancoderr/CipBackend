@@ -2447,7 +2447,9 @@ const createDeposit = async (req, res) => {
       });
     }
 
-    const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
+    // const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
+
+    const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
 
     // ✅ BEP20 USDT ke liye dedicated wallet (environment variable mein set karo)
     const walletAddress = process.env.USDT_BEP20_WALLET; 
@@ -2493,40 +2495,114 @@ const createDeposit = async (req, res) => {
 };
 
 
+// const depositCallback = async (req, res) => {
+//   try {
+//     const { address_in, value, txid } = req.body;
+
+//    const newDeposit = await Deposit.create({
+//   userId: user._id,
+//   depositAddress: response.data.address_in,
+//   amount,
+//   coin,
+//   network,
+//   status: "pending"
+// });
+
+//     if (!deposit) {
+//       return res.send("Invalid deposit");
+//     }
+
+//     if (deposit.status === "completed") {
+//       return res.send("Already processed");
+//     }
+
+//     deposit.status = "completed";
+//     deposit.txid = txid;
+//     deposit.creditedAmount = value;
+
+//     await deposit.save();
+
+//     const user = await User.findById(deposit.userId);
+//     user.wallet += parseFloat(value);
+//     await user.save();
+
+//     res.send("OK");
+
+//   } catch (err) {
+//     console.log(err);
+//     res.send("Error");
+//   }
+// };
+
+
 const depositCallback = async (req, res) => {
   try {
-    const { address_in, value, txid } = req.body;
+    console.log("🔔 Callback Query:", req.query);
+    console.log("🔔 Callback Body:", req.body);
 
-    const deposit = await Deposit.findOne({
-      depositAddress: address_in
-    });
+    // ✅ CryptAPI data (body + query mix)
+    const { address_in, value, txid, confirmations } = req.body;
+    const { secret } = req.query;
+
+    // 🔐 1. Secret validation
+    if (secret !== process.env.CRYPTAPI_SECRET) {
+      console.log("❌ Invalid secret");
+      return res.send("Invalid secret");
+    }
+
+    // 💰 2. Amount validation
+    if (!value || parseFloat(value) <= 0) {
+      console.log("❌ Invalid amount:", value);
+      return res.send("Invalid amount");
+    }
+
+    // ⛓️ 3. Optional: confirmations check (recommended)
+    if (confirmations && confirmations < 1) {
+      console.log("⏳ Waiting for confirmations...");
+      return res.send("Waiting for confirmations");
+    }
+
+    // 🔁 4. Prevent double credit (atomic update)
+    const deposit = await Deposit.findOneAndUpdate(
+      { depositAddress: address_in, status: "pending" },
+      {
+        status: "completed",
+        txid,
+        creditedAmount: parseFloat(value),
+      },
+      { new: true }
+    );
 
     if (!deposit) {
-      return res.send("Invalid deposit");
+      console.log("⚠️ Already processed or invalid deposit");
+      return res.send("Already processed or invalid");
     }
 
-    if (deposit.status === "completed") {
-      return res.send("Already processed");
-    }
-
-    deposit.status = "completed";
-    deposit.txid = txid;
-    deposit.creditedAmount = value;
-
-    await deposit.save();
-
+    // 👤 5. Credit user wallet
     const user = await User.findById(deposit.userId);
+
+    if (!user) {
+      console.log("❌ User not found");
+      return res.send("User not found");
+    }
+
     user.wallet += parseFloat(value);
     await user.save();
 
-    res.send("OK");
+    console.log("✅ Deposit credited:", {
+      userId: user._id,
+      amount: value,
+      txid,
+    });
+
+    // ✅ MUST return "OK"
+    return res.send("OK");
 
   } catch (err) {
-    console.log(err);
-    res.send("Error");
+    console.error("❌ Callback Error:", err);
+    return res.send("Error");
   }
 };
-
 
 
 
