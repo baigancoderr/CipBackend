@@ -14,6 +14,19 @@ const generateUniqueId = async () => {
   return id;
 };
 
+// 🔐 Generate JWT Token
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      id: user._id,
+      telegramId: user.telegramId,
+      role: user.role, // ✅ dynamic role
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+};
+
 // ✅ Telegram Login / Register
 const telegramLogin = async (req, res) => {
   try {
@@ -29,12 +42,9 @@ const telegramLogin = async (req, res) => {
 
     // ✅ Existing user (LOGIN)
     const existingUser = await User.findOne({ telegramId });
+
     if (existingUser) {
-      const token = jwt.sign(
-        { id: existingUser._id, telegramId: existingUser.telegramId },
-        process.env.JWT_SECRET,
-        { expiresIn: "7d" }
-      );
+      const token = generateToken(existingUser);
 
       return res.status(200).json({
         success: true,
@@ -57,7 +67,6 @@ const telegramLogin = async (req, res) => {
     
     // 🟡 OTHER USERS
     else {
-      // ❌ Referral required
       if (!referralCode) {
         return res.status(400).json({
           success: false,
@@ -65,7 +74,6 @@ const telegramLogin = async (req, res) => {
         });
       }
 
-      // ❌ Format validation
       if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
         return res.status(400).json({
           success: false,
@@ -73,10 +81,8 @@ const telegramLogin = async (req, res) => {
         });
       }
 
-      // 🔍 Find ref user
       refUser = await User.findOne({ referralCode });
 
-      // ❌ Invalid referral
       if (!refUser) {
         return res.status(400).json({
           success: false,
@@ -84,7 +90,6 @@ const telegramLogin = async (req, res) => {
         });
       }
 
-      // ❌ Self referral block
       if (refUser.telegramId === telegramId) {
         return res.status(400).json({
           success: false,
@@ -112,6 +117,8 @@ const telegramLogin = async (req, res) => {
       totalReferrals: 0,
       referralEarnings: 0,
       totalInvested: 0,
+
+      role: "user", // ✅ IMPORTANT
     });
 
     // 🎯 Referral reward
@@ -122,11 +129,7 @@ const telegramLogin = async (req, res) => {
     }
 
     // 🔐 Token
-    const token = jwt.sign(
-      { id: user._id, telegramId: user.telegramId },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = generateToken(user);
 
     res.status(201).json({
       success: true,
