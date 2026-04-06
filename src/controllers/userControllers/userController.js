@@ -2336,96 +2336,7 @@ const logout = async (req, res) => {
 
 // 🔥 Fake address generator ( real crypto API)
 // const generateAddress = () => {
-//   return "USDT_" + Math.random().toString(36).substring(2, 12);
-// };
 
-// const createDeposit = async (req, res) => {
-//   try {
-//     const { userId, amount } = req.body;
-
-//     if (!userId || !amount) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "userId and amount required",
-//       });
-//     }
-
-//     const user = await User.findOne({ userId });
-
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found",
-//       });
-//     }
-
-//     const address = generateAddress();
-
-//     const deposit = await Deposit.create({
-//       userId: user._id,
-//       user_id: user.userId,
-//       amount,
-//       depositAddress: address,
-//     });
-
-//     // 🔗 Callback URL (ngrok)
-//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?depositId=${deposit._id}`;
-
-//     res.json({
-//       success: true,
-//       depositId: deposit._id,
-//       address,
-//       amount,
-//       callbackUrl,
-//     });
-
-//   } catch (error) {
-//     console.error("Create Deposit Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server Error",
-//     });
-//   }
-// };
-
-
-
-// const createDeposit = async (req, res) => {
-//   try {
-//     const { userId, amount } = req.body;
-
-//     const user = await User.findOne({ userId });
-//     if (!user) return res.status(404).json({ message: "User not found" });
-
-//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
-
-//     const walletAddress = process.env.USDT_TRON_WALLET; 
-//     // 👆 YOUR OWN RECEIVING WALLET
-
-//     const url = `https://api.cryptapi.io/trc20/usdt/create/`;
-
-//     const response = await axios.get(url, {
-//       params: {
-//         address: walletAddress,
-//         callback: callbackUrl,
-//         order_id: userId,
-//       },
-//     });
-
-//     return res.json({
-//       success: true,
-//       data: response.data,
-//     });
-
-//   } catch (error) {
-//     console.log("CryptAPI Error:", error.response?.data || error.message);
-
-//     return res.status(500).json({
-//       success: false,
-//       error: error.response?.data,
-//     });
-//   }
-// };
 
 
 // const createDeposit = async (req, res) => {
@@ -2516,9 +2427,22 @@ const createDeposit = async (req, res) => {
 
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
 
-    const walletAddress = process.env.USDT_BEP20_WALLET;
+    let walletAddress;
+    let url;
 
-    const url = `https://api.cryptapi.io/bep20/usdt/create/`;
+    // 🔥 Dynamic network handling
+    if (network === "BEP20") {
+      walletAddress = process.env.USDT_BEP20_WALLET;
+      url = "https://api.cryptapi.io/bep20/usdt/create/";
+    } else if (network === "TRC20") {
+      walletAddress = process.env.USDT_TRC20_WALLET;
+      url = "https://api.cryptapi.io/trc20/usdt/create/";
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Unsupported network"
+      });
+    }
 
     const response = await axios.get(url, {
       params: {
@@ -2528,13 +2452,13 @@ const createDeposit = async (req, res) => {
       },
     });
 
-    // 🔥 SAVE IN DB
+    // ✅ Save deposit
     const newDeposit = await Deposit.create({
       userId: user._id,
       depositAddress: response.data.address_in,
       amount: amount || 0,
       coin: coin || "USDT",
-      network: network || "BEP20",
+      network,
       status: "pending"
     });
 
@@ -2547,10 +2471,12 @@ const createDeposit = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("❌ ERROR:", error.response?.data || error.message);
+
     return res.status(500).json({
       success: false,
-      message: "Failed to generate deposit address"
+      message: "Failed to generate deposit address",
+      error: error.response?.data || error.message
     });
   }
 };
