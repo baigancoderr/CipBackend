@@ -30,11 +30,19 @@ const telegramLogin = async (req, res) => {
     // ❌ Already exists
     const existingUser = await User.findOne({ telegramId });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "User already exists",
-      });
-    }
+  const token = jwt.sign(
+    { id: existingUser._id, telegramId: existingUser.telegramId },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  return res.status(200).json({
+    success: true,
+    message: "Login successful",
+    token,
+    user: existingUser,
+  });
+}
 
     // 🔢 Total users count
     const userCount = await User.countDocuments();
