@@ -1187,109 +1187,253 @@ const getReferralData = async (req, res) => {
   }
 };
 
+// const getTeamTreeView = async (req, res) => {
+//   try {
+//     // Validate user ID
+//     if (!req.user?.id) {
+//       return res.status(400).json(errorResponse("Invalid user ID"));
+//     }
+
+//     // Fetch the authenticated user
+//     const authUser = await User.findById(req.user.id).lean(); // Use lean for performance
+//     if (!authUser) {
+//       return res.status(404).json(errorResponse("User not found"));
+//     }
+
+//     const { userId, count = 1, search = "" } = req.query;
+//     const targetUserId = userId || authUser.user_id;
+
+//     // Fetch the target user
+//     const targetUser = await User.findOne({ user_id: targetUserId })
+//       .lean()
+//       .select(
+//         "user_id sponsor_id username totalSelfInvestment",
+//       );
+//     if (!targetUser) {
+//       return res.status(404).json(errorResponse("User not found"));
+//     }
+
+//     // Recursive function to build the tree up to the specified count (depth)
+//     const buildTree = async (userUserId, remainingCount, search = "") => {
+//       const u = await User.findOne({ user_id: userUserId })
+//         .lean()
+//         .select(
+//           "user_id sponsor_id username totalSelfInvestment first_name last_name email",
+//         );
+//       if (!u) return null;
+
+//       const lowerSearch = search.toLowerCase();
+//       const matches =
+//         !search ||
+//         u.username.toLowerCase().includes(lowerSearch) ||
+//         u.first_name.toLowerCase().includes(lowerSearch) ||
+//         u.last_name.toLowerCase().includes(lowerSearch) ||
+//         u.email.toLowerCase().includes(lowerSearch);
+
+//       let children = [];
+//       if (remainingCount > 1) {
+//         const directChildren = await User.find({ parent: userUserId })
+//           .lean()
+//           .select(
+//             "user_id sponsor_id username totalSelfInvestment first_name last_name email",
+//           );
+//         const childrenPromises = directChildren.map((child) =>
+//           buildTree(child.user_id, remainingCount - 1, search)
+//         );
+//         children = (await Promise.all(childrenPromises)).filter(Boolean);
+//       }
+
+//       if (!matches && children.length === 0) {
+//         return null;
+//       }
+
+//       let teamInvestment = 0;
+
+//       children.forEach((child) => {
+//         teamInvestment +=
+//           child.selfInvestment + child.teamInvestment;
+//       });
+
+//       const node = {
+//         user_id: u.user_id,
+//         username: u.username || "Unknown",
+//         firstName: u.first_name || "N/A",
+//         lastName: u.last_name || "N/A",
+//         email: u.email || "N/A",
+//         sponsorId: u.sponsor_id || null,
+//         selfInvestment: u.totalSelfInvestment || 0,
+//         teamInvestment,
+//         children,
+//       };
+
+//       return node;
+//     };
+
+//     // Build the tree
+//     const tree = await buildTree(targetUserId, parseInt(count), search);
+
+//     if (!tree) {
+//       return res.status(404).json(errorResponse("Tree not found"));
+//     }
+
+//     // Format response
+//     res.status(200).json(
+//       successResponse("Team tree view retrieved", {
+//         selfInvestment: targetUser.totalSelfInvestment || 0,
+//         teamInvestment: tree.teamInvestment || 0,
+//         data: [tree],
+//       }),
+//     );
+//   } catch (error) {
+//     // Log error for debugging
+//     console.error("Error in getTeamTreeView:", error);
+//     res.status(500).json(errorResponse("Internal server error"));
+//   }
+// };
+
+
 const getTeamTreeView = async (req, res) => {
   try {
-    // Validate user ID
-    if (!req.user?.id) {
-      return res.status(400).json(errorResponse("Invalid user ID"));
-    }
+    const { userId, depth = 2, search = "" } = req.query;
 
-    // Fetch the authenticated user
-    const authUser = await User.findById(req.user.id).lean(); // Use lean for performance
+    // 🔍 Logged-in user
+    const authUser = await User.findById(req.user.id).select(
+      "userId referralCode totalInvested"
+    );
+
     if (!authUser) {
-      return res.status(404).json(errorResponse("User not found"));
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+      });
     }
 
-    const { userId, count = 1, search = "" } = req.query;
-    const targetUserId = userId || authUser.user_id;
+    const targetUserId = userId || authUser.userId;
 
-    // Fetch the target user
-    const targetUser = await User.findOne({ user_id: targetUserId })
-      .lean()
-      .select(
-        "user_id sponsor_id username totalSelfInvestment",
-      );
+    // 🔍 Target user
+    const targetUser = await User.findOne({ userId: targetUserId }).lean();
+
     if (!targetUser) {
-      return res.status(404).json(errorResponse("User not found"));
+      return res.status(404).json({
+        status: "error",
+        message: "Target user not found",
+      });
     }
 
-    // Recursive function to build the tree up to the specified count (depth)
-    const buildTree = async (userUserId, remainingCount, search = "") => {
-      const u = await User.findOne({ user_id: userUserId })
+    // 🔁 Recursive Tree Builder (Optimized)
+    const buildTree = async (parentUserId, level = 1) => {
+      const children = await User.find({ referredBy: parentUserId })
         .lean()
         .select(
-          "user_id sponsor_id username totalSelfInvestment first_name last_name email",
+          "userId username name email totalInvested referralCode"
         );
-      if (!u) return null;
 
-      const lowerSearch = search.toLowerCase();
-      const matches =
-        !search ||
-        u.username.toLowerCase().includes(lowerSearch) ||
-        u.first_name.toLowerCase().includes(lowerSearch) ||
-        u.last_name.toLowerCase().includes(lowerSearch) ||
-        u.email.toLowerCase().includes(lowerSearch);
+      if (!children.length) return [];
 
-      let children = [];
-      if (remainingCount > 1) {
-        const directChildren = await User.find({ parent: userUserId })
-          .lean()
-          .select(
-            "user_id sponsor_id username totalSelfInvestment first_name last_name email",
+      const result = await Promise.all(
+        children.map(async (child) => {
+          const subChildren =
+            level < depth
+              ? await buildTree(child.referralCode, level + 1)
+              : [];
+
+          // 🔥 Calculate team investment
+          const teamInvestment = subChildren.reduce(
+            (sum, c) => sum + (c.selfInvestment + c.teamInvestment),
+            0
           );
-        const childrenPromises = directChildren.map((child) =>
-          buildTree(child.user_id, remainingCount - 1, search)
-        );
-        children = (await Promise.all(childrenPromises)).filter(Boolean);
-      }
 
-      if (!matches && children.length === 0) {
-        return null;
-      }
+          return {
+            id: child._id,
+            userId: child.userId,
+            name: child.name,
+            username: child.username,
+            email: child.email,
+            referralCode: child.referralCode,
+            selfInvestment: child.totalInvested || 0,
+            teamInvestment,
+            level,
+            children: subChildren,
+          };
+        })
+      );
 
-      let teamInvestment = 0;
-
-      children.forEach((child) => {
-        teamInvestment +=
-          child.selfInvestment + child.teamInvestment;
-      });
-
-      const node = {
-        user_id: u.user_id,
-        username: u.username || "Unknown",
-        firstName: u.first_name || "N/A",
-        lastName: u.last_name || "N/A",
-        email: u.email || "N/A",
-        sponsorId: u.sponsor_id || null,
-        selfInvestment: u.totalSelfInvestment || 0,
-        teamInvestment,
-        children,
-      };
-
-      return node;
+      return result;
     };
 
-    // Build the tree
-    const tree = await buildTree(targetUserId, parseInt(count), search);
+    // 🌳 Build tree
+    let treeChildren = await buildTree(targetUser.referralCode);
 
-    if (!tree) {
-      return res.status(404).json(errorResponse("Tree not found"));
+    // 🔍 Search filter (optional)
+    if (search) {
+      const keyword = search.toLowerCase();
+
+      const filterTree = (nodes) => {
+        return nodes
+          .map((node) => {
+            const match =
+              node.username?.toLowerCase().includes(keyword) ||
+              node.name?.toLowerCase().includes(keyword) ||
+              node.email?.toLowerCase().includes(keyword);
+
+            const filteredChildren = filterTree(node.children || []);
+
+            if (match || filteredChildren.length) {
+              return {
+                ...node,
+                children: filteredChildren,
+              };
+            }
+
+            return null;
+          })
+          .filter(Boolean);
+      };
+
+      treeChildren = filterTree(treeChildren);
     }
 
-    // Format response
-    res.status(200).json(
-      successResponse("Team tree view retrieved", {
-        selfInvestment: targetUser.totalSelfInvestment || 0,
-        teamInvestment: tree.teamInvestment || 0,
-        data: [tree],
-      }),
+    // 🔥 Calculate total team investment
+    const totalTeamInvestment = treeChildren.reduce(
+      (sum, node) =>
+        sum + node.selfInvestment + node.teamInvestment,
+      0
     );
+
+    return res.status(200).json({
+      status: "success",
+      message: "Team tree fetched successfully",
+      data: {
+        selfInvestment: targetUser.totalInvested || 0,
+        teamInvestment: totalTeamInvestment,
+        tree: [
+          {
+            id: targetUser._id,
+            userId: targetUser.userId,
+            name: targetUser.name,
+            username: targetUser.username,
+            email: targetUser.email,
+            referralCode: targetUser.referralCode,
+            selfInvestment: targetUser.totalInvested || 0,
+            teamInvestment: totalTeamInvestment,
+            level: 0,
+            children: treeChildren,
+          },
+        ],
+      },
+    });
   } catch (error) {
-    // Log error for debugging
-    console.error("Error in getTeamTreeView:", error);
-    res.status(500).json(errorResponse("Internal server error"));
+    console.error("Team Tree Error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
   }
 };
+
+
+
+
 
 const getLevelWiseIncome = async (req, res) => {
   try {
