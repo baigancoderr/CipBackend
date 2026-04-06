@@ -2518,15 +2518,18 @@ const depositCallback = async (req, res) => {
     }
 
     // 🔁 4. Prevent duplicate processing
-    const deposit = await Deposit.findOneAndUpdate(
-      { depositAddress: address_in, status: "pending" },
-      {
-        status: "completed",
-        txid,
-        creditedAmount: parseFloat(value),
-      },
-      { new: true }
-    );
+  const deposit = await Deposit.findOneAndUpdate(
+  {
+    depositAddress: new RegExp(`^${address_in}$`, "i"),
+    status: "pending"
+  },
+  {
+    status: "completed",
+    transactionHash: txid,              // ✅ FIXED NAME
+    creditedAmount: parseFloat(value), // ✅ ADD THIS
+  },
+  { new: true }
+);
 
     if (!deposit) {
       console.log("⚠️ Already processed or invalid deposit");

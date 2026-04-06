@@ -2,12 +2,11 @@ const mongoose = require("mongoose");
 
 const depositSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  user_id: { type: String, required: true },
 
   amount: { type: Number, required: true },
-  creditedAmount: { type: Number, default: 0 },   // ✅ ADD THIS
 
   currency: { type: String, default: "USDT" },
-  network: { type: String, required: true },
 
   depositAddress: { type: String, required: true },
 
