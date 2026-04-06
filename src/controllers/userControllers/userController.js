@@ -1906,84 +1906,34 @@ const getTransactionHistory = async (req, res) => {
   }
 };
 
-// const getUserProfile = async (req, res) => {
-//   try {
-//     // Get basic user data
-//     const user = await User.findById(req.user.id)
-//       .select("-password") // Exclude sensitive + internal fields
-//       .lean();
-
-//     if (!user) {
-//       return res.status(404).json(errorResponse("User not found"));
-//     }
-
-//     let kycDob = null;
-//     let kycAddress = null;
-//     let kycStatus = null;
-
-//     // Fetch DOB and Address from KYC table if user has KYC
-//     if (user) {
-//       const kyc = await KYC.findOne({ user: user._id })
-//         .select("dateOfBirthAsPerID addressAsPerID status")
-//         .lean();
-//       if (kyc) {
-//         kycDob = kyc.dateOfBirthAsPerID;
-//         kycAddress = kyc.addressAsPerID;
-//         kycStatus = kyc.status;
-//       }
-//     }
-
-//     // Final profile response
-//     res.status(200).json(
-//       successResponse("User profile retrieved successfully", {
-//         profile: {
-//           ...user, // All user fields (first_name, email, phone, etc.)
-//           dateOfBirth: kycDob, // ← From KYC table
-//           address: kycAddress, // ← From KYC table
-//           kycStatus: kycStatus, // pending / approved / rejected
-//         },
-//       }),
-//     );
-//   } catch (error) {
-//     console.error("Get User Profile Error:", error);
-//     res.status(500).json(errorResponse(error.message));
-//   }
-// };
-
-
-// ✅ GET USER PROFILE
-
-
 const getUserProfile = async (req, res) => {
   try {
-    const { telegramId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = 10;
 
-    // 🔍 Find user
-    const user = await User.findOne({ telegramId });
+    const users = await User.find()
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    const total = await User.countDocuments();
 
-    // ✅ Response
     res.status(200).json({
       success: true,
-      user,
+      page,
+      totalPages: Math.ceil(total / limit),
+      totalUsers: total,
+      users,
     });
 
   } catch (error) {
-    console.error("Profile Error:", error);
+    console.error("Get All Users Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
     });
   }
 };
-
-
 
 
 
