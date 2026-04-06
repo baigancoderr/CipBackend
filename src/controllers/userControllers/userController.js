@@ -2454,7 +2454,8 @@ const createDeposit = async (req, res) => {
 
     // ✅ Save deposit
     const newDeposit = await Deposit.create({
-      userId: user._id,
+      // userId: user._id,
+      user_id: user._id, 
       depositAddress: response.data.address_in,
       amount: amount || 0,
       coin: coin || "USDT",
