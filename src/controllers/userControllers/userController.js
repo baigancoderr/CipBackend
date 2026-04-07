@@ -1294,7 +1294,7 @@ const getReferralData = async (req, res) => {
 
 const getTeamTreeView = async (req, res) => {
   try {
-    const { userId, depth = 2, search = "" } = req.query;
+    const { userId,  search = "" } = req.query;
 
     // 🔍 Logged-in user
     const authUser = await User.findById(req.user.id).select(
@@ -1332,10 +1332,7 @@ const getTeamTreeView = async (req, res) => {
 
       const result = await Promise.all(
         children.map(async (child) => {
-          const subChildren =
-            level < depth
-              ? await buildTree(child.referralCode, level + 1)
-              : [];
+        const subChildren = await buildTree(child.referralCode, level + 1);
 
           // 🔥 Calculate team investment
           const teamInvestment = subChildren.reduce(
