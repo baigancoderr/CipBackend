@@ -31,6 +31,8 @@ const moment = require("moment-timezone");
 const redisClient = require("../../config/redisClient");
 const logger = require("../../utils/logger");
 const Investment = require("../../models/Investment");
+const DepositCallbackLog = require("../../models/DepositCallbackLog");
+
 const axios = require("axios");
 
 // Helper function to calculate total downline investment
@@ -2868,11 +2870,131 @@ const createDeposit = async (req, res) => {
 
 
 
+// const depositCallback = async (req, res) => {
+//   try {
+//     console.log("🔔 Callback Hit");
+
+//     // 🔥 Handle BOTH: GET (CryptAPI) + POST (testing)
+//     const data = Object.keys(req.query).length ? req.query : req.body;
+
+//     const {
+//       address_in,
+//       value,
+//       txid,
+//       confirmations,
+//       secret
+//     } = data;
+
+//     console.log("📥 Incoming Data:", {
+//       address_in,
+//       value,
+//       txid,
+//       confirmations,
+//       secret
+//     });
+
+//     // 🔐 1. Secret Validation
+//     if (secret !== process.env.CRYPTAPI_SECRET) {
+//       console.log("❌ Invalid secret");
+//       return res.send("Invalid secret");
+//     }
+
+//     // 💰 2. Amount Validation
+//     const amount = parseFloat(value);
+//     if (isNaN(amount) || amount <= 0) {
+//       console.log("❌ Invalid amount:", value);
+//       return res.send("Invalid amount");
+//     }
+
+//     // ⛓️ 3. Confirmation Check (SAFE ≥ 2)
+//     if (!confirmations || Number(confirmations) < 2) {
+//       console.log("⏳ Waiting for confirmations:", confirmations);
+//       return res.send("Waiting for confirmations");
+//     }
+
+//     // 🔍 4. Find Deposit
+//     const deposit = await Deposit.findOne({
+//       depositAddress: address_in
+//     });
+
+//     if (!deposit) {
+//       console.log("⚠️ Deposit not found");
+//       return res.send("Deposit not found");
+//     }
+
+//     // 🔁 5. Prevent Duplicate Credit
+//     if (deposit.status === "completed") {
+//       console.log("⚠️ Already processed");
+//       return res.send("Already processed");
+//     }
+
+//     // 👤 6. Find User
+//     const user = await User.findById(deposit.userId);
+//     if (!user) {
+//       console.log("❌ User not found");
+//       return res.send("User not found");
+//     }
+
+//     // 💰 7. Credit Wallet
+//     user.wallet = (user.wallet || 0) + amount;
+//     await user.save();
+
+//     // 🧾 8. Update Deposit
+//     deposit.status = "completed";
+//     deposit.transactionHash = txid;
+//     deposit.creditedAmount = amount;
+//     deposit.confirmations = Number(confirmations);
+//     deposit.completedAt = new Date();
+
+//     await deposit.save();
+
+//     console.log("✅ Deposit SUCCESS:", {
+//       userId: user._id,
+//       amount,
+//       txid,
+//       network: deposit.network
+//     });
+
+//     // ✅ IMPORTANT (CryptAPI needs OK)
+//     return res.send("OK");
+
+//   } catch (error) {
+//     console.error("❌ Callback Error:", error);
+//     return res.send("Error");
+//   }
+// };
+
+
+
+
+const logCallback = async ({
+  data,
+  status = "pending",
+  message = "",
+  network = ""
+}) => {
+  try {
+    await DepositCallbackLog.create({
+      rawData: data,
+      address_in: data.address_in,
+      txid: data.txid,
+      amount: parseFloat(data.value || 0),
+      confirmations: Number(data.confirmations || 0),
+      network,
+      status,
+      message
+    });
+  } catch (err) {
+    console.error("Log save failed:", err.message);
+  }
+};
+
+
+
 const depositCallback = async (req, res) => {
   try {
     console.log("🔔 Callback Hit");
 
-    // 🔥 Handle BOTH: GET (CryptAPI) + POST (testing)
     const data = Object.keys(req.query).length ? req.query : req.body;
 
     const {
@@ -2883,61 +3005,59 @@ const depositCallback = async (req, res) => {
       secret
     } = data;
 
-    console.log("📥 Incoming Data:", {
-      address_in,
-      value,
-      txid,
-      confirmations,
-      secret
-    });
-
-    // 🔐 1. Secret Validation
+    // 🔐 Secret Check
     if (secret !== process.env.CRYPTAPI_SECRET) {
-      console.log("❌ Invalid secret");
+      await logCallback({ data, status: "failed", message: "Invalid secret" });
       return res.send("Invalid secret");
     }
 
-    // 💰 2. Amount Validation
     const amount = parseFloat(value);
+
     if (isNaN(amount) || amount <= 0) {
-      console.log("❌ Invalid amount:", value);
+      await logCallback({ data, status: "failed", message: "Invalid amount" });
       return res.send("Invalid amount");
     }
 
-    // ⛓️ 3. Confirmation Check (SAFE ≥ 2)
     if (!confirmations || Number(confirmations) < 2) {
-      console.log("⏳ Waiting for confirmations:", confirmations);
+      await logCallback({ data, status: "pending", message: "Waiting confirmations" });
       return res.send("Waiting for confirmations");
     }
 
-    // 🔍 4. Find Deposit
     const deposit = await Deposit.findOne({
       depositAddress: address_in
     });
 
     if (!deposit) {
-      console.log("⚠️ Deposit not found");
+      await logCallback({ data, status: "failed", message: "Deposit not found" });
       return res.send("Deposit not found");
     }
 
-    // 🔁 5. Prevent Duplicate Credit
     if (deposit.status === "completed") {
-      console.log("⚠️ Already processed");
+      await logCallback({
+        data,
+        status: "duplicate",
+        message: "Already processed",
+        network: deposit.network
+      });
       return res.send("Already processed");
     }
 
-    // 👤 6. Find User
     const user = await User.findById(deposit.userId);
     if (!user) {
-      console.log("❌ User not found");
+      await logCallback({
+        data,
+        status: "failed",
+        message: "User not found",
+        network: deposit.network
+      });
       return res.send("User not found");
     }
 
-    // 💰 7. Credit Wallet
+    // 💰 Credit Wallet
     user.wallet = (user.wallet || 0) + amount;
     await user.save();
 
-    // 🧾 8. Update Deposit
+    // 🧾 Update Deposit
     deposit.status = "completed";
     deposit.transactionHash = txid;
     deposit.creditedAmount = amount;
@@ -2946,21 +3066,29 @@ const depositCallback = async (req, res) => {
 
     await deposit.save();
 
-    console.log("✅ Deposit SUCCESS:", {
-      userId: user._id,
-      amount,
-      txid,
+    // ✅ SUCCESS LOG
+    await logCallback({
+      data,
+      status: "success",
+      message: "Deposit credited",
       network: deposit.network
     });
 
-    // ✅ IMPORTANT (CryptAPI needs OK)
     return res.send("OK");
 
   } catch (error) {
     console.error("❌ Callback Error:", error);
+
+    await logCallback({
+      data: req.body || req.query,
+      status: "error",
+      message: error.message
+    });
+
     return res.send("Error");
   }
 };
+
 
 
 
