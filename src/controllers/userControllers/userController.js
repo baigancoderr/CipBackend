@@ -2813,35 +2813,28 @@ const createDeposit = async (req, res) => {
     }
 
     if (!config.wallet) {
-      return res.status(500).json({
-        success: false,
-        message: `${network} wallet not configured in environment`
-      });
+      return res.status(500).json({ success: false, message: `${network} wallet not configured` });
     }
 
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
 
-    console.log(`Creating deposit for ${network} | Amount: ${amount} | Wallet: ${config.wallet}`);
+    console.log(`Creating ${network} deposit for user ${userId}`);
 
     const response = await axios.get(config.url, {
       params: {
         address: config.wallet,
         callback: callbackUrl,
         order_id: userId,
-        // Extra params for better debugging (optional)
-        json: 1,           // JSON response
-        pending: 1         // Pending tx bhi accept kare
+        multi_token: 1,        
+        json: 1,
       }
     });
 
-    // Agar CryptAPI error deta hai toh handle karo
-    if (!response.data || response.data.status === "error") {
-      const errorMsg = response.data?.message || response.data?.error || "CryptAPI returned error";
+    // for error
+    if (response.data?.status === "error" || !response.data?.address_in) {
+      const errMsg = response.data?.message || response.data?.error || "CryptAPI error";
       console.error("CryptAPI Error:", response.data);
-      return res.status(400).json({
-        success: false,
-        message: errorMsg
-      });
+      return res.status(400).json({ success: false, message: errMsg });
     }
 
     const deposit = await Deposit.create({
@@ -2853,8 +2846,6 @@ const createDeposit = async (req, res) => {
       status: "pending"
     });
 
-    console.log("Deposit created successfully:", deposit._id);
-
     res.json({
       success: true,
       data: response.data,
@@ -2862,22 +2853,16 @@ const createDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Full Deposit Error:", err.response?.data || err.message || err);
-
-    let errorMessage = "Deposit failed";
-
-    if (err.response?.data) {
-      errorMessage = err.response.data.message || err.response.data.error || JSON.stringify(err.response.data);
+    console.error("Full Deposit Error:", err.response?.data || err.message);
+    
+    let message = "Deposit failed";
+    if (err.response?.data?.message) {
+      message = err.response.data.message;
     } else if (err.message) {
-      errorMessage = err.message;
+      message = err.message;
     }
 
-    res.status(500).json({
-      success: false,
-      message: errorMessage,
-      // Remove this line in production for security
-      debug: process.env.NODE_ENV === "development" ? err.message : undefined
-    });
+    res.status(500).json({ success: false, message });
   }
 };
 
