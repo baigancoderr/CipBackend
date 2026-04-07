@@ -2996,8 +2996,6 @@ const createDeposit = async (req, res) => {
 
 // controllers/depositController.js
 
-const Deposit = require("../models/Deposit");
-const User = require("../models/User");
 
 const depositCallback = async (req, res) => {
   try {
