@@ -2674,29 +2674,115 @@ const logout = async (req, res) => {
 
 
 
+// const NETWORK_CONFIG = {
+//   // Web20 / ETH USDT (Ethereum Mainnet)
+//   WEB20_USDT: {
+//     coin: "USDT",
+//     wallet: process.env.EVM_WALLET,
+//     url: "https://api.cryptapi.io/erc20/usdt/create/"
+//   },
+
+//   // Base USDT
+//   BASE_USDT: {
+//     coin: "USDT",
+//     wallet: process.env.EVM_WALLET,
+//     url: "https://api.cryptapi.io/base/usdt/create/"
+//   },
+
+//   // Base USDC
+//   BASE_USDC: {
+//     coin: "USDC",
+//     wallet: process.env.EVM_WALLET,
+//     url: "https://api.cryptapi.io/base/usdc/create/"
+//   },
+
+//   // Polygon USDT
+//   POLYGON_USDT: {
+//     coin: "USDT",
+//     wallet: process.env.EVM_WALLET,
+//     url: "https://api.cryptapi.io/polygon/usdt/create/"
+//   }
+// };
+
+// const createDeposit = async (req, res) => {
+//   try {
+//     const { userId, amount, network } = req.body;
+
+//     if (!userId) {
+//       return res.status(400).json({ success: false, message: "userId required" });
+//     }
+
+//     const user = await User.findOne({ userId });
+//     if (!user) {
+//       return res.status(404).json({ success: false, message: "User not found" });
+//     }
+
+//     const config = NETWORK_CONFIG[network];
+
+//     if (!config) {
+//       return res.status(400).json({ success: false, message: "Invalid network" });
+//     }
+
+//     if (!config.wallet) {
+//       return res.status(500).json({
+//         success: false,
+//         message: `${network} wallet not configured`
+//       });
+//     }
+
+//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+
+//     const response = await axios.get(config.url, {
+//       params: {
+//         address: config.wallet,
+//         callback: callbackUrl,
+//         order_id: userId,
+//       }
+//     });
+
+//     const deposit = await Deposit.create({
+//       userId: user._id,
+//       depositAddress: response.data.address_in,
+//       amount,
+//       coin: config.coin,
+//       network,
+//       status: "pending"
+//     });
+
+//     res.json({
+//       success: true,
+//       data: response.data,
+//       depositId: deposit._id
+//     });
+
+//   } catch (err) {
+//     console.log(err);
+//     res.status(500).json({
+//       success: false,
+//       message: "Deposit failed"
+//     });
+//   }
+// };
+
 const NETWORK_CONFIG = {
-  // Web20 / ETH USDT (Ethereum Mainnet)
   WEB20_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
     url: "https://api.cryptapi.io/erc20/usdt/create/"
   },
 
-  // Base USDT
   BASE_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
     url: "https://api.cryptapi.io/base/usdt/create/"
   },
 
-  // Base USDC
   BASE_USDC: {
     coin: "USDC",
     wallet: process.env.EVM_WALLET,
     url: "https://api.cryptapi.io/base/usdc/create/"
   },
 
-  // Polygon USDT
   POLYGON_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
@@ -2712,42 +2798,62 @@ const createDeposit = async (req, res) => {
       return res.status(400).json({ success: false, message: "userId required" });
     }
 
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ success: false, message: "Valid amount is required" });
+    }
+
     const user = await User.findOne({ userId });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const config = NETWORK_CONFIG[network];
-
     if (!config) {
-      return res.status(400).json({ success: false, message: "Invalid network" });
+      return res.status(400).json({ success: false, message: `Invalid network: ${network}` });
     }
 
     if (!config.wallet) {
       return res.status(500).json({
         success: false,
-        message: `${network} wallet not configured`
+        message: `${network} wallet not configured in environment`
       });
     }
 
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+
+    console.log(`Creating deposit for ${network} | Amount: ${amount} | Wallet: ${config.wallet}`);
 
     const response = await axios.get(config.url, {
       params: {
         address: config.wallet,
         callback: callbackUrl,
         order_id: userId,
+        // Extra params for better debugging (optional)
+        json: 1,           // JSON response
+        pending: 1         // Pending tx bhi accept kare
       }
     });
+
+    // Agar CryptAPI error deta hai toh handle karo
+    if (!response.data || response.data.status === "error") {
+      const errorMsg = response.data?.message || response.data?.error || "CryptAPI returned error";
+      console.error("CryptAPI Error:", response.data);
+      return res.status(400).json({
+        success: false,
+        message: errorMsg
+      });
+    }
 
     const deposit = await Deposit.create({
       userId: user._id,
       depositAddress: response.data.address_in,
-      amount,
+      amount: Number(amount),
       coin: config.coin,
       network,
       status: "pending"
     });
+
+    console.log("Deposit created successfully:", deposit._id);
 
     res.json({
       success: true,
@@ -2756,10 +2862,21 @@ const createDeposit = async (req, res) => {
     });
 
   } catch (err) {
-    console.log(err);
+    console.error("Full Deposit Error:", err.response?.data || err.message || err);
+
+    let errorMessage = "Deposit failed";
+
+    if (err.response?.data) {
+      errorMessage = err.response.data.message || err.response.data.error || JSON.stringify(err.response.data);
+    } else if (err.message) {
+      errorMessage = err.message;
+    }
+
     res.status(500).json({
       success: false,
-      message: "Deposit failed"
+      message: errorMessage,
+      // Remove this line in production for security
+      debug: process.env.NODE_ENV === "development" ? err.message : undefined
     });
   }
 };
