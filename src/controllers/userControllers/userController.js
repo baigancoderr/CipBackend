@@ -2672,188 +2672,31 @@ const logout = async (req, res) => {
 
 // Gouri Code
 
-// 🔥 Fake address generator ( real crypto API)
-// const generateAddress = () => {
-
-
-
-// const createDeposit = async (req, res) => {
-//   try {
-//     const { userId, amount, coin, network } = req.body;   // network ko bhi accept kar rahe hain
-
-//     if (!userId) {
-//       return res.status(400).json({ 
-//         success: false, 
-//         message: "userId is required ." 
-//       });
-//     }
-
-//     const user = await User.findOne({ userId });
-//     if (!user) {
-//       return res.status(404).json({ 
-//         success: false, 
-//         message: "User not found" 
-//       });
-//     }
-
-//     // const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback`;
-
-//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
-
-//     // ✅ BEP20 USDT ke liye dedicated wallet (environment variable mein set karo)
-//     const walletAddress = process.env.USDT_BEP20_WALLET; 
-
-//     if (!walletAddress) {
-//       return res.status(500).json({
-//         success: false,
-//         message: "BEP20 wallet address not configured"
-//       });
-//     }
-
-//     // BEP20 USDT endpoint
-//     const url = `https://api.cryptapi.io/bep20/usdt/create/`;
-
-//     const response = await axios.get(url, {
-//       params: {
-//         address: walletAddress,      // Aapka receiving BEP20 wallet
-//         callback: callbackUrl,
-//         order_id: userId,
-//         // Extra parameters (optional but recommended)
-//         // multi_token: 1,           // Agar multiple tokens support karna hai to enable kar sakte ho
-//       },
-//     });
-
-//     console.log("CryptAPI BEP20 Response:", response.data);
-
-//     return res.json({
-//       success: true,
-//       data: response.data,        // yahan address_in, etc. milega
-//       network: "BEP20",
-//       coin: "USDT"
-//     });
-
-//   } catch (error) {
-//     console.error("CryptAPI BEP20 Error:", error.response?.data || error.message);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to generate deposit address",
-//       error: error.response?.data || error.message
-//     });
-//   }
-// };
-
-// const createDeposit = async (req, res) => {
-//   try {
-//     const { userId, amount, coin, network } = req.body;
-
-//     // 🔐 1. Validate input
-//     if (!userId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "userId is required."
-//       });
-//     }
-
-//     const user = await User.findOne({ userId });
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found"
-//       });
-//     }
-
-//     // 🔗 2. Callback URL with secret
-//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
-
-//     let walletAddress;
-//     let url;
-
-//     // 🌐 3. Network handling
-//     if (network === "BEP20") {
-//       walletAddress = process.env.USDT_BEP20_WALLET;
-//       url = "https://api.cryptapi.io/bep20/usdt/create/";
-//     } else if (network === "TRC20") {
-//       walletAddress = process.env.USDT_TRC20_WALLET;
-//       url = "https://api.cryptapi.io/trc20/usdt/create/";
-//     } else {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Unsupported network"
-//       });
-//     }
-
-//     if (!walletAddress) {
-//       return res.status(500).json({
-//         success: false,
-//         message: "Wallet address not configured"
-//       });
-//     }
-
-//     // 🚀 4. Call CryptAPI
-//     const response = await axios.get(url, {
-//       params: {
-//         address: walletAddress,
-//         callback: callbackUrl,
-//         order_id: userId,
-//       },
-//     });
-
-//     // 💾 5. Save deposit in DB
-//     const newDeposit = await Deposit.create({
-//       userId: user._id,   // ✅ FIXED (IMPORTANT)
-//       depositAddress: response.data.address_in,
-//       amount: amount || 0,
-//       coin: coin || "USDT",
-//       network,
-//       status: "pending"
-//     });
-
-//     console.log("✅ Deposit saved:", newDeposit);
-
-//     return res.json({
-//       success: true,
-//       data: response.data,
-//       depositId: newDeposit._id
-//     });
-
-//   } catch (error) {
-//     console.error("❌ ERROR:", error.response?.data || error.message);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to generate deposit address",
-//       error: error.response?.data || error.message
-//     });
-//   }
-// };
 
 
 const NETWORK_CONFIG = {
-  TRC20: {
-    coin: "USDT",
-    wallet: process.env.TRON_WALLET,
-    url: "https://api.cryptapi.io/trc20/usdt/create/"
-  },
-
-  BEP20: {
-    coin: "USDT",
-    wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/bep20/usdt/create/"
-  },
-
-  ERC20_USDT: {
+  // Web20 / ETH USDT (Ethereum Mainnet)
+  WEB20_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
     url: "https://api.cryptapi.io/erc20/usdt/create/"
   },
 
-  ERC20_USDC: {
-    coin: "USDC",
+  // Base USDT
+  BASE_USDT: {
+    coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/erc20/usdc/create/"
+    url: "https://api.cryptapi.io/base/usdt/create/"
   },
 
+  // Base USDC
+  BASE_USDC: {
+    coin: "USDC",
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/base/usdc/create/"
+  },
+
+  // Polygon USDT
   POLYGON_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
@@ -2922,82 +2765,6 @@ const createDeposit = async (req, res) => {
 };
 
 
-// const depositCallback = async (req, res) => {
-//   try {
-//     console.log("🔔 Callback Query:", req.query);
-//     console.log("🔔 Callback Body:", req.body);
-
-//     const { address_in, value, txid, confirmations } = req.body;
-//     const { secret } = req.query;
-
-//     // 🔐 1. Secret validation
-//     if (secret !== process.env.CRYPTAPI_SECRET) {
-//       console.log("❌ Invalid secret");
-//       return res.send("Invalid secret");
-//     }
-
-//     // 💰 2. Amount validation
-//     if (!value || parseFloat(value) <= 0) {
-//       console.log("❌ Invalid amount:", value);
-//       return res.send("Invalid amount");
-//     }
-
-//     // ⛓️ 3. Confirmations check
-//     if (confirmations && confirmations < 1) {
-//       console.log("⏳ Waiting for confirmations...");
-//       return res.send("Waiting for confirmations");
-//     }
-
-//     // 🔁 4. Prevent duplicate processing
-//   const deposit = await Deposit.findOneAndUpdate(
-//   {
-//     depositAddress: new RegExp(`^${address_in}$`, "i"),
-//     status: "pending"
-//   },
-//   {
-//     status: "completed",
-//     transactionHash: txid,              // ✅ FIXED NAME
-//     creditedAmount: parseFloat(value), // ✅ ADD THIS
-//   },
-//   { new: true }
-// );
-
-//     if (!deposit) {
-//       console.log("⚠️ Already processed or invalid deposit");
-//       return res.send("Already processed or invalid");
-//     }
-
-//     // 👤 5. Get user
-//     const user = await User.findById(deposit.userId);
-
-//     if (!user) {
-//       console.log("❌ User not found");
-//       return res.send("User not found");
-//     }
-
-//     // 💰 6. Credit wallet
-//     user.wallet += parseFloat(value);
-//     await user.save();
-
-//     console.log("✅ Deposit credited:", {
-//       userId: user._id,
-//       amount: value,
-//       txid,
-//     });
-
-//     // ✅ MUST return OK
-//     return res.send("OK");
-
-//   } catch (err) {
-//     console.error("❌ Callback Error:", err);
-//     return res.send("Error");
-//   }
-// };
-
-// controllers/depositController.js
-
-
-// controllers/depositController.js
 
 const depositCallback = async (req, res) => {
   try {
