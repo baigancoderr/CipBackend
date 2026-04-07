@@ -2743,162 +2743,345 @@ const logout = async (req, res) => {
 //   }
 // };
 
+// const createDeposit = async (req, res) => {
+//   try {
+//     const { userId, amount, coin, network } = req.body;
+
+//     // 🔐 1. Validate input
+//     if (!userId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "userId is required."
+//       });
+//     }
+
+//     const user = await User.findOne({ userId });
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found"
+//       });
+//     }
+
+//     // 🔗 2. Callback URL with secret
+//     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+
+//     let walletAddress;
+//     let url;
+
+//     // 🌐 3. Network handling
+//     if (network === "BEP20") {
+//       walletAddress = process.env.USDT_BEP20_WALLET;
+//       url = "https://api.cryptapi.io/bep20/usdt/create/";
+//     } else if (network === "TRC20") {
+//       walletAddress = process.env.USDT_TRC20_WALLET;
+//       url = "https://api.cryptapi.io/trc20/usdt/create/";
+//     } else {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Unsupported network"
+//       });
+//     }
+
+//     if (!walletAddress) {
+//       return res.status(500).json({
+//         success: false,
+//         message: "Wallet address not configured"
+//       });
+//     }
+
+//     // 🚀 4. Call CryptAPI
+//     const response = await axios.get(url, {
+//       params: {
+//         address: walletAddress,
+//         callback: callbackUrl,
+//         order_id: userId,
+//       },
+//     });
+
+//     // 💾 5. Save deposit in DB
+//     const newDeposit = await Deposit.create({
+//       userId: user._id,   // ✅ FIXED (IMPORTANT)
+//       depositAddress: response.data.address_in,
+//       amount: amount || 0,
+//       coin: coin || "USDT",
+//       network,
+//       status: "pending"
+//     });
+
+//     console.log("✅ Deposit saved:", newDeposit);
+
+//     return res.json({
+//       success: true,
+//       data: response.data,
+//       depositId: newDeposit._id
+//     });
+
+//   } catch (error) {
+//     console.error("❌ ERROR:", error.response?.data || error.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to generate deposit address",
+//       error: error.response?.data || error.message
+//     });
+//   }
+// };
+
+
+const NETWORK_CONFIG = {
+  TRC20: {
+    coin: "USDT",
+    wallet: process.env.TRON_WALLET,
+    url: "https://api.cryptapi.io/trc20/usdt/create/"
+  },
+
+  BEP20: {
+    coin: "USDT",
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/bep20/usdt/create/"
+  },
+
+  ERC20_USDT: {
+    coin: "USDT",
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/erc20/usdt/create/"
+  },
+
+  ERC20_USDC: {
+    coin: "USDC",
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/erc20/usdc/create/"
+  },
+
+  POLYGON_USDT: {
+    coin: "USDT",
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/polygon/usdt/create/"
+  }
+};
+
 const createDeposit = async (req, res) => {
   try {
-    const { userId, amount, coin, network } = req.body;
+    const { userId, amount, network } = req.body;
 
-    // 🔐 1. Validate input
     if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "userId is required."
-      });
+      return res.status(400).json({ success: false, message: "userId required" });
     }
 
     const user = await User.findOne({ userId });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // 🔗 2. Callback URL with secret
-    const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+    const config = NETWORK_CONFIG[network];
 
-    let walletAddress;
-    let url;
-
-    // 🌐 3. Network handling
-    if (network === "BEP20") {
-      walletAddress = process.env.USDT_BEP20_WALLET;
-      url = "https://api.cryptapi.io/bep20/usdt/create/";
-    } else if (network === "TRC20") {
-      walletAddress = process.env.USDT_TRC20_WALLET;
-      url = "https://api.cryptapi.io/trc20/usdt/create/";
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: "Unsupported network"
-      });
+    if (!config) {
+      return res.status(400).json({ success: false, message: "Invalid network" });
     }
 
-    if (!walletAddress) {
+    if (!config.wallet) {
       return res.status(500).json({
         success: false,
-        message: "Wallet address not configured"
+        message: `${network} wallet not configured`
       });
     }
 
-    // 🚀 4. Call CryptAPI
-    const response = await axios.get(url, {
+    const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+
+    const response = await axios.get(config.url, {
       params: {
-        address: walletAddress,
+        address: config.wallet,
         callback: callbackUrl,
         order_id: userId,
-      },
+      }
     });
 
-    // 💾 5. Save deposit in DB
-    const newDeposit = await Deposit.create({
-      userId: user._id,   // ✅ FIXED (IMPORTANT)
+    const deposit = await Deposit.create({
+      userId: user._id,
       depositAddress: response.data.address_in,
-      amount: amount || 0,
-      coin: coin || "USDT",
+      amount,
+      coin: config.coin,
       network,
       status: "pending"
     });
 
-    console.log("✅ Deposit saved:", newDeposit);
-
-    return res.json({
+    res.json({
       success: true,
       data: response.data,
-      depositId: newDeposit._id
+      depositId: deposit._id
     });
 
-  } catch (error) {
-    console.error("❌ ERROR:", error.response?.data || error.message);
-
-    return res.status(500).json({
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({
       success: false,
-      message: "Failed to generate deposit address",
-      error: error.response?.data || error.message
+      message: "Deposit failed"
     });
   }
 };
 
 
+// const depositCallback = async (req, res) => {
+//   try {
+//     console.log("🔔 Callback Query:", req.query);
+//     console.log("🔔 Callback Body:", req.body);
+
+//     const { address_in, value, txid, confirmations } = req.body;
+//     const { secret } = req.query;
+
+//     // 🔐 1. Secret validation
+//     if (secret !== process.env.CRYPTAPI_SECRET) {
+//       console.log("❌ Invalid secret");
+//       return res.send("Invalid secret");
+//     }
+
+//     // 💰 2. Amount validation
+//     if (!value || parseFloat(value) <= 0) {
+//       console.log("❌ Invalid amount:", value);
+//       return res.send("Invalid amount");
+//     }
+
+//     // ⛓️ 3. Confirmations check
+//     if (confirmations && confirmations < 1) {
+//       console.log("⏳ Waiting for confirmations...");
+//       return res.send("Waiting for confirmations");
+//     }
+
+//     // 🔁 4. Prevent duplicate processing
+//   const deposit = await Deposit.findOneAndUpdate(
+//   {
+//     depositAddress: new RegExp(`^${address_in}$`, "i"),
+//     status: "pending"
+//   },
+//   {
+//     status: "completed",
+//     transactionHash: txid,              // ✅ FIXED NAME
+//     creditedAmount: parseFloat(value), // ✅ ADD THIS
+//   },
+//   { new: true }
+// );
+
+//     if (!deposit) {
+//       console.log("⚠️ Already processed or invalid deposit");
+//       return res.send("Already processed or invalid");
+//     }
+
+//     // 👤 5. Get user
+//     const user = await User.findById(deposit.userId);
+
+//     if (!user) {
+//       console.log("❌ User not found");
+//       return res.send("User not found");
+//     }
+
+//     // 💰 6. Credit wallet
+//     user.wallet += parseFloat(value);
+//     await user.save();
+
+//     console.log("✅ Deposit credited:", {
+//       userId: user._id,
+//       amount: value,
+//       txid,
+//     });
+
+//     // ✅ MUST return OK
+//     return res.send("OK");
+
+//   } catch (err) {
+//     console.error("❌ Callback Error:", err);
+//     return res.send("Error");
+//   }
+// };
+
+// controllers/depositController.js
+
+const Deposit = require("../models/Deposit");
+const User = require("../models/User");
+
 const depositCallback = async (req, res) => {
   try {
-    console.log("🔔 Callback Query:", req.query);
-    console.log("🔔 Callback Body:", req.body);
+    console.log("🔔 Callback Hit");
 
-    const { address_in, value, txid, confirmations } = req.body;
-    const { secret } = req.query;
+    // 🔥 CryptAPI sends GET → use query
+    const { address_in, value, txid, confirmations, secret } = req.query;
 
-    // 🔐 1. Secret validation
+    console.log("📥 Data:", { address_in, value, txid, confirmations });
+
+    // 🔐 1. Secret Validation
     if (secret !== process.env.CRYPTAPI_SECRET) {
       console.log("❌ Invalid secret");
       return res.send("Invalid secret");
     }
 
-    // 💰 2. Amount validation
-    if (!value || parseFloat(value) <= 0) {
+    // 💰 2. Validate Amount
+    const amount = parseFloat(value);
+    if (!amount || amount <= 0) {
       console.log("❌ Invalid amount:", value);
       return res.send("Invalid amount");
     }
 
-    // ⛓️ 3. Confirmations check
-    if (confirmations && confirmations < 1) {
-      console.log("⏳ Waiting for confirmations...");
+    // ⛓️ 3. Confirmations Check (SAFE)
+    if (!confirmations || Number(confirmations) < 2) {
+      console.log("⏳ Waiting for confirmations:", confirmations);
       return res.send("Waiting for confirmations");
     }
 
-    // 🔁 4. Prevent duplicate processing
-  const deposit = await Deposit.findOneAndUpdate(
-  {
-    depositAddress: new RegExp(`^${address_in}$`, "i"),
-    status: "pending"
-  },
-  {
-    status: "completed",
-    transactionHash: txid,              // ✅ FIXED NAME
-    creditedAmount: parseFloat(value), // ✅ ADD THIS
-  },
-  { new: true }
-);
+    // 🔍 4. Find Pending Deposit
+    const deposit = await Deposit.findOne({
+      depositAddress: address_in,
+      status: "pending"
+    });
 
     if (!deposit) {
-      console.log("⚠️ Already processed or invalid deposit");
-      return res.send("Already processed or invalid");
+      console.log("⚠️ Deposit not found or already processed");
+      return res.send("Already processed");
     }
 
-    // 👤 5. Get user
-    const user = await User.findById(deposit.userId);
+    // 🔁 5. Double Safety Check
+    if (deposit.status === "completed") {
+      console.log("⚠️ Already completed");
+      return res.send("Already completed");
+    }
 
+    // 👤 6. Find User
+    const user = await User.findById(deposit.userId);
     if (!user) {
       console.log("❌ User not found");
       return res.send("User not found");
     }
 
-    // 💰 6. Credit wallet
-    user.wallet += parseFloat(value);
+    // 💰 7. Credit User Wallet
+    user.wallet = (user.wallet || 0) + amount;
     await user.save();
 
-    console.log("✅ Deposit credited:", {
+    // 🧾 8. Update Deposit
+    deposit.status = "completed";
+    deposit.transactionHash = txid;
+    deposit.creditedAmount = amount;
+    deposit.confirmations = confirmations;
+    deposit.completedAt = new Date();
+
+    await deposit.save();
+
+    console.log("✅ SUCCESS:", {
       userId: user._id,
-      amount: value,
+      amount,
       txid,
+      network: deposit.network
     });
 
-    // ✅ MUST return OK
+    // ✅ MUST return OK (important for CryptAPI)
     return res.send("OK");
 
-  } catch (err) {
-    console.error("❌ Callback Error:", err);
+  } catch (error) {
+    console.error("❌ Callback Error:", error);
     return res.send("Error");
   }
+};
+
+module.exports = {
+  depositCallback
 };
 
 
