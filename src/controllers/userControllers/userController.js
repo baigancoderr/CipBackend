@@ -2968,6 +2968,7 @@ const createDeposit = async (req, res) => {
 
 
 const logCallback = async ({
+  req,
   data,
   status = "pending",
   message = "",
@@ -2976,18 +2977,35 @@ const logCallback = async ({
   try {
     await DepositCallbackLog.create({
       rawData: data,
+
       address_in: data.address_in,
+      address_out: data.address_out,
+
       txid: data.txid,
       amount: parseFloat(data.value || 0),
+      value_coin: data.value_coin,
+
       confirmations: Number(data.confirmations || 0),
+      coin: data.coin,
       network,
+
+      fee: data.fee,
+      pending: data.pending,
+
       status,
-      message
+      message,
+
+      // 🔥 Extra Debug Info
+      ip: req?.ip,
+      method: req?.method,
+      headers: req?.headers
     });
+
   } catch (err) {
-    console.error("Log save failed:", err.message);
+    console.error("❌ Log save failed:", err.message);
   }
 };
+
 
 
 
@@ -2995,7 +3013,13 @@ const depositCallback = async (req, res) => {
   try {
     console.log("🔔 Callback Hit");
 
-    const data = Object.keys(req.query).length ? req.query : req.body;
+    // 🔥 FULL RAW DATA (NO LOSS)
+    const fullData = {
+      ...req.query,
+      ...req.body
+    };
+
+    console.log("📦 FULL DATA:", fullData);
 
     const {
       address_in,
@@ -3003,38 +3027,62 @@ const depositCallback = async (req, res) => {
       txid,
       confirmations,
       secret
-    } = data;
+    } = fullData;
 
     // 🔐 Secret Check
     if (secret !== process.env.CRYPTAPI_SECRET) {
-      await logCallback({ data, status: "failed", message: "Invalid secret" });
+      await logCallback({
+        req,
+        data: fullData,
+        status: "failed",
+        message: "Invalid secret"
+      });
       return res.send("Invalid secret");
     }
 
+    // 💰 Amount Check
     const amount = parseFloat(value);
-
     if (isNaN(amount) || amount <= 0) {
-      await logCallback({ data, status: "failed", message: "Invalid amount" });
+      await logCallback({
+        req,
+        data: fullData,
+        status: "failed",
+        message: "Invalid amount"
+      });
       return res.send("Invalid amount");
     }
 
+    // ⛓️ Confirmation Check
     if (!confirmations || Number(confirmations) < 2) {
-      await logCallback({ data, status: "pending", message: "Waiting confirmations" });
+      await logCallback({
+        req,
+        data: fullData,
+        status: "pending",
+        message: "Waiting confirmations"
+      });
       return res.send("Waiting for confirmations");
     }
 
+    // 🔍 Find Deposit
     const deposit = await Deposit.findOne({
       depositAddress: address_in
     });
 
     if (!deposit) {
-      await logCallback({ data, status: "failed", message: "Deposit not found" });
+      await logCallback({
+        req,
+        data: fullData,
+        status: "failed",
+        message: "Deposit not found"
+      });
       return res.send("Deposit not found");
     }
 
+    // 🔁 Duplicate Protection
     if (deposit.status === "completed") {
       await logCallback({
-        data,
+        req,
+        data: fullData,
         status: "duplicate",
         message: "Already processed",
         network: deposit.network
@@ -3042,15 +3090,30 @@ const depositCallback = async (req, res) => {
       return res.send("Already processed");
     }
 
+    // 👤 Find User
     const user = await User.findById(deposit.userId);
     if (!user) {
       await logCallback({
-        data,
+        req,
+        data: fullData,
         status: "failed",
         message: "User not found",
         network: deposit.network
       });
       return res.send("User not found");
+    }
+
+    // 💸 OPTIONAL: Prevent duplicate TXID
+    const existingTx = await Deposit.findOne({ transactionHash: txid });
+    if (existingTx) {
+      await logCallback({
+        req,
+        data: fullData,
+        status: "duplicate",
+        message: "Duplicate TXID",
+        network: deposit.network
+      });
+      return res.send("Duplicate TX");
     }
 
     // 💰 Credit Wallet
@@ -3068,10 +3131,17 @@ const depositCallback = async (req, res) => {
 
     // ✅ SUCCESS LOG
     await logCallback({
-      data,
+      req,
+      data: fullData,
       status: "success",
       message: "Deposit credited",
       network: deposit.network
+    });
+
+    console.log("✅ Deposit SUCCESS:", {
+      userId: user._id,
+      amount,
+      txid
     });
 
     return res.send("OK");
@@ -3080,7 +3150,11 @@ const depositCallback = async (req, res) => {
     console.error("❌ Callback Error:", error);
 
     await logCallback({
-      data: req.body || req.query,
+      req,
+      data: {
+        ...req.query,
+        ...req.body
+      },
       status: "error",
       message: error.message
     });
@@ -3088,6 +3162,8 @@ const depositCallback = async (req, res) => {
     return res.send("Error");
   }
 };
+
+
 
 
 
