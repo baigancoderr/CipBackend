@@ -169,6 +169,8 @@ router.post("/logout", authMiddleware(["user"]), logout);
 router.post("/deposit/create", createDeposit);
 
 // 🔁 Callback (IMPORTANT)
-router.post("/deposit/callback", depositCallback);
+
+router.get("/deposit/callback", depositCallback);
+router.post("/deposit/callback", depositCallback); // 👈 for testing
 
 module.exports = router;

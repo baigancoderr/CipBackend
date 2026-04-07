@@ -2997,14 +2997,30 @@ const createDeposit = async (req, res) => {
 // controllers/depositController.js
 
 
+// controllers/depositController.js
+
 const depositCallback = async (req, res) => {
   try {
     console.log("🔔 Callback Hit");
 
-    // 🔥 CryptAPI sends GET → use query
-    const { address_in, value, txid, confirmations, secret } = req.query;
+    // 🔥 Handle BOTH: GET (CryptAPI) + POST (testing)
+    const data = Object.keys(req.query).length ? req.query : req.body;
 
-    console.log("📥 Data:", { address_in, value, txid, confirmations });
+    const {
+      address_in,
+      value,
+      txid,
+      confirmations,
+      secret
+    } = data;
+
+    console.log("📥 Incoming Data:", {
+      address_in,
+      value,
+      txid,
+      confirmations,
+      secret
+    });
 
     // 🔐 1. Secret Validation
     if (secret !== process.env.CRYPTAPI_SECRET) {
@@ -3012,34 +3028,33 @@ const depositCallback = async (req, res) => {
       return res.send("Invalid secret");
     }
 
-    // 💰 2. Validate Amount
+    // 💰 2. Amount Validation
     const amount = parseFloat(value);
-    if (!amount || amount <= 0) {
+    if (isNaN(amount) || amount <= 0) {
       console.log("❌ Invalid amount:", value);
       return res.send("Invalid amount");
     }
 
-    // ⛓️ 3. Confirmations Check (SAFE)
+    // ⛓️ 3. Confirmation Check (SAFE ≥ 2)
     if (!confirmations || Number(confirmations) < 2) {
       console.log("⏳ Waiting for confirmations:", confirmations);
       return res.send("Waiting for confirmations");
     }
 
-    // 🔍 4. Find Pending Deposit
+    // 🔍 4. Find Deposit
     const deposit = await Deposit.findOne({
-      depositAddress: address_in,
-      status: "pending"
+      depositAddress: address_in
     });
 
     if (!deposit) {
-      console.log("⚠️ Deposit not found or already processed");
-      return res.send("Already processed");
+      console.log("⚠️ Deposit not found");
+      return res.send("Deposit not found");
     }
 
-    // 🔁 5. Double Safety Check
+    // 🔁 5. Prevent Duplicate Credit
     if (deposit.status === "completed") {
-      console.log("⚠️ Already completed");
-      return res.send("Already completed");
+      console.log("⚠️ Already processed");
+      return res.send("Already processed");
     }
 
     // 👤 6. Find User
@@ -3049,7 +3064,7 @@ const depositCallback = async (req, res) => {
       return res.send("User not found");
     }
 
-    // 💰 7. Credit User Wallet
+    // 💰 7. Credit Wallet
     user.wallet = (user.wallet || 0) + amount;
     await user.save();
 
@@ -3057,19 +3072,19 @@ const depositCallback = async (req, res) => {
     deposit.status = "completed";
     deposit.transactionHash = txid;
     deposit.creditedAmount = amount;
-    deposit.confirmations = confirmations;
+    deposit.confirmations = Number(confirmations);
     deposit.completedAt = new Date();
 
     await deposit.save();
 
-    console.log("✅ SUCCESS:", {
+    console.log("✅ Deposit SUCCESS:", {
       userId: user._id,
       amount,
       txid,
       network: deposit.network
     });
 
-    // ✅ MUST return OK (important for CryptAPI)
+    // ✅ IMPORTANT (CryptAPI needs OK)
     return res.send("OK");
 
   } catch (error) {
@@ -3078,9 +3093,8 @@ const depositCallback = async (req, res) => {
   }
 };
 
-module.exports = {
-  depositCallback
-};
+
+
 
 
 
