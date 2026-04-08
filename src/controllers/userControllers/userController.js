@@ -2789,6 +2789,11 @@ const NETWORK_CONFIG = {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
     url: "https://api.cryptapi.io/polygon/usdt/create/"
+  },
+  BEP20_USDT: {
+    coin: "USDT",
+    wallet: process.env.EVM_WALLET,       
+    url: "https://api.cryptapi.io/bep20/usdt/create/"
   }
 };
 
