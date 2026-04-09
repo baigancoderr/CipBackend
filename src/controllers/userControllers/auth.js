@@ -1,164 +1,16 @@
-// const jwt = require("jsonwebtoken");
-// const User = require("../../models/User");
-
-// // 🔥 Unique ID Generator
-// const generateUniqueId = async () => {
-//   let id;
-//   let exists = true;
-
-//   while (exists) {
-//     id = "CPR" + Math.random().toString(36).substring(2, 8).toUpperCase();
-//     exists = await User.findOne({ userId: id });
-//   }
-
-//   return id;
-// };
-
-// // 🔐 Generate JWT Token
-// const generateToken = (user) => {
-//   return jwt.sign(
-//     {
-//       id: user._id,
-//       telegramId: user.telegramId,
-//       role: user.role, // ✅ dynamic role
-//     },
-//     process.env.JWT_SECRET,
-//     { expiresIn: "7d" }
-//   );
-// };
-
-// // ✅ Telegram Login / Register
-// const telegramLogin = async (req, res) => {
-//   try {
-//     const { telegramId, name, username, referralCode } = req.body;
-
-//     // ❗ Validation
-//     if (!telegramId || !name) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "telegramId and name required",
-//       });
-//     }
-
-//     // ✅ Existing user (LOGIN)
-//     const existingUser = await User.findOne({ telegramId });
-
-//     if (existingUser) {
-//       const token = generateToken(existingUser);
-
-//       return res.status(200).json({
-//         success: true,
-//         message: "Login successful",
-//         token,
-//         user: existingUser,
-//       });
-//     }
-
-//     // 🔢 Total users count
-//     const userCount = await User.countDocuments();
-
-//     let refUser = null;
-//     let finalReferral = null;
-
-//     // 🟢 FIRST USER
-//     if (userCount === 0) {
-//       finalReferral = "SYSTEM";
-//     } 
-    
-//     // 🟡 OTHER USERS
-//     else {
-//       if (!referralCode) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Referral code is required",
-//         });
-//       }
-
-//       if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Invalid referral code format",
-//         });
-//       }
-
-//       refUser = await User.findOne({ referralCode });
-
-//       if (!refUser) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Invalid referral code",
-//         });
-//       }
-
-//       if (refUser.telegramId === telegramId) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "You cannot use your own referral code",
-//         });
-//       }
-
-//       finalReferral = referralCode;
-//     }
-
-//     // 🔥 Generate Unique ID
-//     const uniqueId = await generateUniqueId();
-
-//     // 🆕 Create user
-//     const user = await User.create({
-//       telegramId,
-//       name,
-//       username: username || "",
-
-//       userId: uniqueId,
-//       referralCode: uniqueId,
-//       referredBy: finalReferral,
-
-//       walletBalance: 0,
-//       totalReferrals: 0,
-//       referralEarnings: 0,
-//       totalInvested: 0,
-
-//       role: "user", // ✅ IMPORTANT
-//     });
-
-//     // 🎯 Referral reward
-//     if (refUser) {
-//       refUser.totalReferrals += 1;
-//       refUser.referralEarnings += 10;
-//       await refUser.save();
-//     }
-
-//     // 🔐 Token
-//     const token = generateToken(user);
-
-//     res.status(201).json({
-//       success: true,
-//       message: "User registered successfully",
-//       token,
-//       user,
-//     });
-
-//   } catch (error) {
-//     console.error("Telegram Login Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Server Error",
-//     });
-//   }
-// };
-
-// module.exports = {
-//   telegramLogin,
-// };
-
-
-
-
-
 const jwt = require("jsonwebtoken");
 const User = require("../../models/User");
 
-// 🔥 Unique ID Generator
+// Generate JWT Token
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id, telegramId: user.telegramId, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+};
+
+// Generate Unique User ID
 const generateUniqueId = async () => {
   let id;
   let exists = true;
@@ -167,42 +19,26 @@ const generateUniqueId = async () => {
     id = "CPR" + Math.random().toString(36).substring(2, 8).toUpperCase();
     exists = await User.findOne({ userId: id });
   }
-
   return id;
 };
 
-// 🔐 Generate JWT Token
-const generateToken = (user) => {
-  return jwt.sign(
-    {
-      id: user._id,
-      telegramId: user.telegramId,
-      role: user.role,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-};
-
-// ✅ Telegram Login / Register
+// Telegram Login / Register
 const telegramLogin = async (req, res) => {
   try {
     const { telegramId, name, username, referralCode } = req.body;
 
-    // ❗ Basic validation
     if (!telegramId || !name) {
       return res.status(400).json({
         success: false,
-        message: "telegramId and name required",
+        message: "telegramId and name are required",
       });
     }
 
-    // ✅ 1. CHECK EXISTING USER (LOGIN)
+    // Check if user already exists → Direct Login
     let user = await User.findOne({ telegramId });
 
     if (user) {
       const token = generateToken(user);
-
       return res.status(200).json({
         success: true,
         message: "Login successful",
@@ -211,17 +47,15 @@ const telegramLogin = async (req, res) => {
       });
     }
 
-    // ✅ 2. NEW USER FLOW
+    // New User Registration
     const userCount = await User.countDocuments();
-
-    let refUser = null;
     let finalReferral = null;
+    let refUser = null;
 
-    // 🟢 FIRST USER (NO REFERRAL REQUIRED)
     if (userCount === 0) {
+      // First user in system
       finalReferral = "SYSTEM";
     } else {
-      // ❌ Referral required
       if (!referralCode) {
         return res.status(400).json({
           success: false,
@@ -229,15 +63,13 @@ const telegramLogin = async (req, res) => {
         });
       }
 
-      // ❌ Format check
       if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
         return res.status(400).json({
           success: false,
-          message: "Invalid referral format",
+          message: "Invalid referral code format",
         });
       }
 
-      // ❌ Find referrer
       refUser = await User.findOne({ referralCode });
 
       if (!refUser) {
@@ -247,51 +79,48 @@ const telegramLogin = async (req, res) => {
         });
       }
 
-      // ❌ Self referral check (extra safety)
       if (refUser.telegramId === telegramId) {
         return res.status(400).json({
           success: false,
-          message: "You cannot use your own referral",
+          message: "You cannot use your own referral code",
         });
       }
 
       finalReferral = referralCode;
     }
 
-    // 🔥 Generate Unique ID
+    // Generate unique ID
     const uniqueId = await generateUniqueId();
 
-    // 🆕 CREATE USER
+    // Create new user
     user = await User.create({
       telegramId,
-      name,
+      name: name.trim(),
       username: username || "",
-
       userId: uniqueId,
       referralCode: uniqueId,
       referredBy: finalReferral,
-
       walletBalance: 0,
       totalReferrals: 0,
       referralEarnings: 0,
       totalInvested: 0,
-
+      dailyIncome: 0,
+      activePackage: 0,
       role: "user",
     });
 
-    // 🎯 GIVE REFERRAL BONUS
+    // Give referral bonus to referrer
     if (refUser) {
       refUser.totalReferrals += 1;
       refUser.referralEarnings += 10;
       await refUser.save();
     }
 
-    // 🔐 TOKEN
     const token = generateToken(user);
 
     return res.status(201).json({
       success: true,
-      message: "User registered successfully",
+      message: "Account created successfully",
       token,
       user,
     });
@@ -300,7 +129,7 @@ const telegramLogin = async (req, res) => {
     console.error("Telegram Login Error:", error);
     return res.status(500).json({
       success: false,
-      message: "Server Error",
+      message: "Server error. Please try again.",
     });
   }
 };
