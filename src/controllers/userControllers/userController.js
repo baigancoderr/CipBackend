@@ -396,6 +396,16 @@ const getDashboard = async (req, res) => {
 };
 
 
+const checkFirstUser = async (req, res) => {
+  try {
+    const count = await User.countDocuments();
+    res.json({ success: true, isFirstUser: count === 0 });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+
 const getUserStakedPlans = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -3269,6 +3279,7 @@ module.exports = {
   CreateInvestment,
   createDeposit,
   depositCallback,
+  checkFirstUser,
   
 
 };

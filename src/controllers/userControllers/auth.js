@@ -14,7 +14,6 @@ const generateToken = (user) => {
 const generateUniqueId = async () => {
   let id;
   let exists = true;
-
   while (exists) {
     id = "CPR" + Math.random().toString(36).substring(2, 8).toUpperCase();
     exists = await User.findOne({ userId: id });
@@ -22,77 +21,56 @@ const generateUniqueId = async () => {
   return id;
 };
 
-// Telegram Login / Register
+// ✅ Telegram Login / Register - Final Correct Version
 const telegramLogin = async (req, res) => {
   try {
     const { telegramId, name, username, referralCode } = req.body;
 
     if (!telegramId || !name) {
-      return res.status(400).json({
-        success: false,
-        message: "telegramId and name are required",
-      });
+      return res.status(400).json({ success: false, message: "telegramId and name are required" });
     }
 
-    // Check if user already exists → Direct Login
+    // Existing user login
     let user = await User.findOne({ telegramId });
-
     if (user) {
       const token = generateToken(user);
-      return res.status(200).json({
-        success: true,
-        message: "Login successful",
-        token,
-        user,
-      });
+      return res.status(200).json({ success: true, message: "Login successful", token, user });
     }
 
-    // New User Registration
     const userCount = await User.countDocuments();
     let finalReferral = null;
     let refUser = null;
 
+    // First user in the system
     if (userCount === 0) {
-      // First user in system
       finalReferral = "SYSTEM";
-    } else {
-      if (!referralCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Referral code is required",
-        });
+    } 
+    // All other new users
+    else {
+      if (!referralCode || !referralCode.trim()) {
+        return res.status(400).json({ success: false, message: "Referral code is required" });
       }
 
-      if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid referral code format",
-        });
+      if (!/^CPR[A-Z0-9]{6}$/.test(referralCode.trim())) {
+        return res.status(400).json({ success: false, message: "Invalid referral code format" });
       }
 
-      refUser = await User.findOne({ referralCode });
+      refUser = await User.findOne({ referralCode: referralCode.trim() });
 
       if (!refUser) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid referral code",
-        });
+        return res.status(400).json({ success: false, message: "Invalid referral code" });
       }
 
       if (refUser.telegramId === telegramId) {
-        return res.status(400).json({
-          success: false,
-          message: "You cannot use your own referral code",
-        });
+        return res.status(400).json({ success: false, message: "You cannot use your own referral code" });
       }
 
-      finalReferral = referralCode;
+      finalReferral = referralCode.trim();
     }
 
-    // Generate unique ID
     const uniqueId = await generateUniqueId();
 
-    // Create new user
+    // Create user (All users are normal "user" role)
     user = await User.create({
       telegramId,
       name: name.trim(),
@@ -100,16 +78,16 @@ const telegramLogin = async (req, res) => {
       userId: uniqueId,
       referralCode: uniqueId,
       referredBy: finalReferral,
+      role: "user",                    // Everyone is normal user
       walletBalance: 0,
       totalReferrals: 0,
       referralEarnings: 0,
       totalInvested: 0,
       dailyIncome: 0,
       activePackage: 0,
-      role: "user",
     });
 
-    // Give referral bonus to referrer
+    // Give referral bonus to referrer (works for everyone including first user)
     if (refUser) {
       refUser.totalReferrals += 1;
       refUser.referralEarnings += 10;
@@ -127,10 +105,7 @@ const telegramLogin = async (req, res) => {
 
   } catch (error) {
     console.error("Telegram Login Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error. Please try again.",
-    });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 

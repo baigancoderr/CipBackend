@@ -31,6 +31,7 @@ contactFormEmail,
   CreateInvestment,
    createDeposit,
   depositCallback,
+  checkFirstUser,
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { investInPlan, getUserInvestments, getListedPlans } = require("../controllers/userControllers/investmentController");
@@ -162,6 +163,9 @@ router.post("/sendsupportemail", authMiddleware(["user"]), sendSupportEmail);
 router.post("/contactformmail", contactFormEmail);
 
 router.post("/logout", authMiddleware(["user"]), logout);
+
+
+router.get("/check-first-user", checkFirstUser);
 
 
 
