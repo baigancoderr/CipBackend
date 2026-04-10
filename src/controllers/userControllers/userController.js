@@ -343,7 +343,7 @@ const calculateDownlineUsers = async (referralCode) => {
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage totalReferrals isActive"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive"
     );
 
     if (!user) {
@@ -352,6 +352,11 @@ const getDashboard = async (req, res) => {
         message: "User not found",
       });
     }
+
+    // 🔥 REAL-TIME referral count
+    const totalReferrals = await User.countDocuments({
+      referredBy: user.referralCode,
+    });
 
     res.status(200).json({
       success: true,
@@ -365,30 +370,12 @@ const getDashboard = async (req, res) => {
       },
       dashboard: {
         stats: [
-          { 
-            title: "LIVE PRICE", 
-            value: "$0.12" 
-          },
-          { 
-            title: "TOTAL DEPOSIT", 
-            value: `$${user.totalInvested.toFixed(2)}` 
-          },
-          { 
-            title: "WALLET BALANCE", 
-            value: `$${user.walletBalance.toFixed(2)}` 
-          },
-          { 
-            title: "TOTAL EARNINGS", 
-            value: `$${user.totalEarnings.toFixed(2)}` 
-          },
-          { 
-            title: "ACTIVE PACKAGE", 
-            value: `${user.activePackage} ` 
-          },
-          { 
-            title: "TEAM", 
-            value: `${user.totalReferrals} ` 
-          },
+          { title: "LIVE PRICE", value: "$0.12" },
+          { title: "TOTAL DEPOSIT", value: `$${user.totalInvested.toFixed(2)}` },
+          { title: "WALLET BALANCE", value: `$${user.walletBalance.toFixed(2)}` },
+          { title: "TOTAL EARNINGS", value: `$${user.totalEarnings.toFixed(2)}` },
+          { title: "ACTIVE PACKAGE", value: `${user.activePackage}` },
+          { title: "TEAM", value: `${totalReferrals}` }, // ✅ dynamic
         ],
         profitTracker: {
           totalInvested: user.totalInvested,
@@ -396,7 +383,7 @@ const getDashboard = async (req, res) => {
           dailyIncome: user.dailyIncome,
         },
         teamStats: {
-          totalReferrals: user.totalReferrals,
+          totalReferrals, // ✅ dynamic
           referralEarnings: user.referralEarnings,
         },
         referralLink: `https://t.me/cipera_bot?startapp=${user.referralCode}`,
@@ -1368,11 +1355,11 @@ const getReferralData = async (req, res) => {
 
 const getTeamTreeView = async (req, res) => {
   try {
-    const { userId,  search = "" } = req.query;
+    const { userId, search = "" } = req.query;
 
     // 🔍 Logged-in user
     const authUser = await User.findById(req.user.id).select(
-      "userId referralCode totalInvested"
+      "userId referralCode totalInvested name username email"
     );
 
     if (!authUser) {
@@ -1385,7 +1372,9 @@ const getTeamTreeView = async (req, res) => {
     const targetUserId = userId || authUser.userId;
 
     // 🔍 Target user
-    const targetUser = await User.findOne({ userId: targetUserId }).lean();
+    const targetUser = await User.findOne({ userId: targetUserId })
+      .select("userId referralCode totalInvested name username email")
+      .lean();
 
     if (!targetUser) {
       return res.status(404).json({
@@ -1394,21 +1383,32 @@ const getTeamTreeView = async (req, res) => {
       });
     }
 
-    // 🔁 Recursive Tree Builder (Optimized)
-    const buildTree = async (parentUserId, level = 1) => {
-      const children = await User.find({ referredBy: parentUserId })
-        .lean()
-        .select(
-          "userId username name email totalInvested referralCode"
-        );
+    // 🔥 Dynamic direct referrals (MAIN USER)
+    const directReferrals = await User.countDocuments({
+      referredBy: targetUser.referralCode,
+    });
+
+    // 🔁 Recursive Tree Builder
+    const buildTree = async (parentReferralCode, level = 1) => {
+      const children = await User.find({
+        referredBy: parentReferralCode,
+      })
+        .select("userId username name email totalInvested referralCode")
+        .lean();
 
       if (!children.length) return [];
 
       const result = await Promise.all(
         children.map(async (child) => {
-        const subChildren = await buildTree(child.referralCode, level + 1);
+          // 🔁 recursion
+          const subChildren = await buildTree(child.referralCode, level + 1);
 
-          // 🔥 Calculate team investment
+          // 🔥 child direct referrals
+          const childDirectReferrals = await User.countDocuments({
+            referredBy: child.referralCode,
+          });
+
+          // 🔥 team investment
           const teamInvestment = subChildren.reduce(
             (sum, c) => sum + (c.selfInvestment + c.teamInvestment),
             0
@@ -1421,8 +1421,11 @@ const getTeamTreeView = async (req, res) => {
             username: child.username,
             email: child.email,
             referralCode: child.referralCode,
+
             selfInvestment: child.totalInvested || 0,
             teamInvestment,
+            directReferrals: childDirectReferrals, // ✅ added
+
             level,
             children: subChildren,
           };
@@ -1435,7 +1438,7 @@ const getTeamTreeView = async (req, res) => {
     // 🌳 Build tree
     let treeChildren = await buildTree(targetUser.referralCode);
 
-    // 🔍 Search filter (optional)
+    // 🔍 Search filter
     if (search) {
       const keyword = search.toLowerCase();
 
@@ -1464,19 +1467,22 @@ const getTeamTreeView = async (req, res) => {
       treeChildren = filterTree(treeChildren);
     }
 
-    // 🔥 Calculate total team investment
+    // 🔥 Total team investment
     const totalTeamInvestment = treeChildren.reduce(
       (sum, node) =>
         sum + node.selfInvestment + node.teamInvestment,
       0
     );
 
+    // ✅ FINAL RESPONSE
     return res.status(200).json({
       status: "success",
       message: "Team tree fetched successfully",
       data: {
         selfInvestment: targetUser.totalInvested || 0,
         teamInvestment: totalTeamInvestment,
+        directReferrals, // ✅ main user count
+
         tree: [
           {
             id: targetUser._id,
@@ -1485,8 +1491,11 @@ const getTeamTreeView = async (req, res) => {
             username: targetUser.username,
             email: targetUser.email,
             referralCode: targetUser.referralCode,
+
             selfInvestment: targetUser.totalInvested || 0,
             teamInvestment: totalTeamInvestment,
+            directReferrals, // ✅ add here also
+
             level: 0,
             children: treeChildren,
           },
@@ -2320,26 +2329,23 @@ const getTransactionHistory = async (req, res) => {
 
 const getUserProfile = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const userId = req.user.id;
 
-    const users = await User.find()
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .sort({ createdAt: -1 });
+    const user = await User.findById(userId);
 
-    const total = await User.countDocuments();
+    // 🔥 Dynamic referral count
+    const totalReferrals = await User.countDocuments({
+      referredBy: user.referralCode,
+    });
 
     res.status(200).json({
       success: true,
-      page,
-      totalPages: Math.ceil(total / limit),
-      totalUsers: total,
-      users,
+      user,
+      totalReferrals, // ✅ dynamic value
     });
 
   } catch (error) {
-    console.error("Get All Users Error:", error);
+    console.error("Profile Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",

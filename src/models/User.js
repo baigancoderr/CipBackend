@@ -40,10 +40,10 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    totalReferrals: {
-      type: Number,
-      default: 0,
-    },
+    // totalReferrals: {
+    //   type: Number,
+    //   default: 0,
+    // },
 
     referralEarnings: {
       type: Number,
