@@ -2320,26 +2320,16 @@ const getTransactionHistory = async (req, res) => {
 
 const getUserProfile = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const userId = req.user.id; // token se aa raha hai
 
-    const users = await User.find()
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    const total = await User.countDocuments();
+    const user = await User.findById(userId);
 
     res.status(200).json({
       success: true,
-      page,
-      totalPages: Math.ceil(total / limit),
-      totalUsers: total,
-      users,
+      user,
     });
 
   } catch (error) {
-    console.error("Get All Users Error:", error);
     res.status(500).json({
       success: false,
       message: "Server Error",
