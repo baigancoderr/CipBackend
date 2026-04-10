@@ -2329,19 +2329,55 @@ const getTransactionHistory = async (req, res) => {
 
 const getUserProfile = async (req, res) => {
   try {
-    const userId = req.user.id;
+    let user;
 
-    const user = await User.findById(userId);
+    // ✅ Case 1: telegramId diya hai
+    if (req.params.telegramId) {
+      user = await User.findOne({
+        telegramId: req.params.telegramId,
+      });
+    } 
+    // ✅ Case 2: token se user
+    else if (req.user?.id) {
+      user = await User.findById(req.user.id);
+    } 
+    // ❌ no data
+    else {
+      return res.status(400).json({
+        success: false,
+        message: "User identifier missing",
+      });
+    }
 
-    // 🔥 Dynamic referral count
+    // ❌ user nahi mila
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 🔥 REAL-TIME referral count
     const totalReferrals = await User.countDocuments({
       referredBy: user.referralCode,
     });
 
+    // ✅ Response clean
     res.status(200).json({
       success: true,
-      user,
-      totalReferrals, // ✅ dynamic value
+      user: {
+        userId: user.userId,
+        name: user.name,
+        username: user.username,
+        telegramId: user.telegramId,
+        referralCode: user.referralCode,
+        walletBalance: user.walletBalance,
+        totalEarnings: user.totalEarnings,
+        totalInvested: user.totalInvested,
+        activePackage: user.activePackage,
+        isActive: user.isActive,
+      },
+      totalReferrals, // 🔥 dynamic
     });
 
   } catch (error) {
