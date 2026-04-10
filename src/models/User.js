@@ -93,26 +93,50 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// ====================== DELETE HOOK ======================
+// ====================== DELETE HOOKS (isActive ke hisaab se) ======================
 
-userSchema.pre("deleteOne", { document: true, query: false }, async function (next) {
+// Case 1: Jab findByIdAndDelete() ya findOneAndDelete use hota hai
+userSchema.pre("findOneAndDelete", async function (next) {
   try {
-    
-    if (this.referredBy && this.referredBy !== "SYSTEM") {
-      
-      await mongoose.model("User").updateOne(
-        { referralCode: this.referredBy },     // Referrer 
-        { $inc: { totalReferrals: -1 } }       // totalReferrals  -1
+    const docToDelete = await this.model.findOne(this.getFilter());
+
+    if (docToDelete && docToDelete.referredBy && docToDelete.referredBy !== "SYSTEM") {
+      await this.model.updateOne(
+        { referralCode: docToDelete.referredBy },
+        { $inc: { totalReferrals: -1 } }
       );
-
-      console.log(`✅ Referral count decreased for: ${this.referredBy} (User deleted: ${this.userId || this.telegramId})`);
+      console.log(`✅ Referral count decreased for: ${docToDelete.referredBy} (User: ${docToDelete.userId})`);
     }
-
     next();
   } catch (error) {
-    console.error("❌ Error in pre-delete hook:", error);
-    next(error);  
+    console.error("❌ Error in findOneAndDelete hook:", error);
+    next(error);
   }
+});
+
+// Case 2: Document level deleteOne ke liye (backup)
+userSchema.pre("deleteOne", { document: true, query: false }, async function (next) {
+  try {
+    if (this.referredBy && this.referredBy !== "SYSTEM") {
+      await mongoose.model("User").updateOne(
+        { referralCode: this.referredBy },
+        { $inc: { totalReferrals: -1 } }
+      );
+      console.log(`✅ Referral count decreased for: ${this.referredBy} (User: ${this.userId})`);
+    }
+    next();
+  } catch (error) {
+    console.error("❌ Error in deleteOne hook:", error);
+    next(error);
+  }
+});
+
+// ====================== IMPORTANT QUERY MIDDLEWARE ======================
+// Yeh ensure karega ki inactive users normal queries mein na aaye
+
+userSchema.pre(/^find/, function (next) {
+  this.where({ isActive: true });
+  next();
 });
 
 module.exports = mongoose.model("User", userSchema);
