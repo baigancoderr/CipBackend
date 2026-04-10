@@ -24,10 +24,10 @@ const userSchema = new mongoose.Schema(
       unique: true,
     },
 
-    referralCode: {
-      type: String,
-      unique: true,
-    },
+    // referralCode: {
+    //   type: String,
+    //   unique: true,
+    // },
 
     role: {
       type: String,

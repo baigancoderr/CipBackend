@@ -340,10 +340,84 @@ const calculateDownlineUsers = async (referralCode) => {
 //   }
 // };
 
+// const getDashboard = async (req, res) => {
+//   try {
+//     const user = await User.findById(req.user.id).select(
+//       "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage totalReferrals isActive"
+//     );
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Dashboard data retrieved successfully",
+//       user: {
+//         userId: user.userId,
+//         name: user.name,
+//         username: user.username,
+//         referralCode: user.referralCode,
+//         isActive: user.isActive,
+//       },
+//       dashboard: {
+//         stats: [
+//           { 
+//             title: "LIVE PRICE", 
+//             value: "$0.12" 
+//           },
+//           { 
+//             title: "TOTAL DEPOSIT", 
+//             value: `$${user.totalInvested.toFixed(2)}` 
+//           },
+//           { 
+//             title: "WALLET BALANCE", 
+//             value: `$${user.walletBalance.toFixed(2)}` 
+//           },
+//           { 
+//             title: "TOTAL EARNINGS", 
+//             value: `$${user.totalEarnings.toFixed(2)}` 
+//           },
+//           { 
+//             title: "ACTIVE PACKAGE", 
+//             value: `${user.activePackage} ` 
+//           },
+//           { 
+//             title: "TEAM", 
+//             value: `${user.totalReferrals} ` 
+//           },
+//         ],
+//         profitTracker: {
+//           totalInvested: user.totalInvested,
+//           totalEarnings: user.totalEarnings,
+//           dailyIncome: user.dailyIncome,
+//         },
+//         teamStats: {
+//           totalReferrals: user.totalReferrals,
+//           referralEarnings: user.referralEarnings,
+//         },
+//         referralLink: `https://t.me/cipera_bot?startapp=${user.referralCode}`,
+//         tokenPrice: 0.12,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Dashboard Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch dashboard data",
+//     });
+//   }
+// };
+
+
+
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage totalReferrals isActive"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive"
     );
 
     if (!user) {
@@ -352,6 +426,12 @@ const getDashboard = async (req, res) => {
         message: "User not found",
       });
     }
+
+    // ✅ LIVE REFERRAL COUNT
+    const totalReferrals = await User.countDocuments({
+      referredBy: user.referralCode,
+      isActive: true, // optional (kyunki tu already middleware use kar raha hai)
+    });
 
     res.status(200).json({
       success: true,
@@ -365,30 +445,12 @@ const getDashboard = async (req, res) => {
       },
       dashboard: {
         stats: [
-          { 
-            title: "LIVE PRICE", 
-            value: "$0.12" 
-          },
-          { 
-            title: "TOTAL DEPOSIT", 
-            value: `$${user.totalInvested.toFixed(2)}` 
-          },
-          { 
-            title: "WALLET BALANCE", 
-            value: `$${user.walletBalance.toFixed(2)}` 
-          },
-          { 
-            title: "TOTAL EARNINGS", 
-            value: `$${user.totalEarnings.toFixed(2)}` 
-          },
-          { 
-            title: "ACTIVE PACKAGE", 
-            value: `${user.activePackage} ` 
-          },
-          { 
-            title: "TEAM", 
-            value: `${user.totalReferrals} ` 
-          },
+          { title: "LIVE PRICE", value: "$0.12" },
+          { title: "TOTAL DEPOSIT", value: `$${user.totalInvested.toFixed(2)}` },
+          { title: "WALLET BALANCE", value: `$${user.walletBalance.toFixed(2)}` },
+          { title: "TOTAL EARNINGS", value: `$${user.totalEarnings.toFixed(2)}` },
+          { title: "ACTIVE PACKAGE", value: `${user.activePackage}` },
+          { title: "TEAM", value: `${totalReferrals}` }, // 👈 dynamic
         ],
         profitTracker: {
           totalInvested: user.totalInvested,
@@ -396,7 +458,7 @@ const getDashboard = async (req, res) => {
           dailyIncome: user.dailyIncome,
         },
         teamStats: {
-          totalReferrals: user.totalReferrals,
+          totalReferrals, // 👈 dynamic
           referralEarnings: user.referralEarnings,
         },
         referralLink: `https://t.me/cipera_bot?startapp=${user.referralCode}`,
