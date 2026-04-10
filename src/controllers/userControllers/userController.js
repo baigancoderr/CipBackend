@@ -411,7 +411,6 @@ const calculateDownlineUsers = async (referralCode) => {
 //     });
 //   }
 // };
-
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
@@ -425,53 +424,99 @@ const getDashboard = async (req, res) => {
       });
     }
 
-    // Ensure referralCode exists (fallback if missing)
+    // Ensure referralCode exists
     if (!user.referralCode) {
-      user.referralCode = `CPR${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      user.referralCode = `CPR${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
       await user.save();
     }
 
-    // Live referral count (only active users)
-    const totalReferrals = await User.countDocuments({
+    // ✅ 1. DIRECT REFERRALS (LEVEL 1 ONLY)
+    const directReferrals = await User.countDocuments({
       referredBy: user.referralCode,
       isActive: true,
     });
 
+    // ✅ 2. TOTAL TEAM (DIRECT + INDIRECT)
+    let totalTeam = 0;
+    let currentLevelCodes = [user.referralCode];
+
+    while (currentLevelCodes.length > 0) {
+      const users = await User.find({
+        referredBy: { $in: currentLevelCodes },
+        isActive: true,
+      }).select("referralCode");
+
+      if (users.length === 0) break;
+
+      totalTeam += users.length;
+
+      currentLevelCodes = users.map((u) => u.referralCode);
+    }
+
+    // Referral Link
     const referralLink = `https://t.me/cipera_bot?startapp=${user.referralCode}`;
 
     res.status(200).json({
       success: true,
       message: "Dashboard data retrieved successfully",
+
       user: {
         userId: user.userId,
         name: user.name || "User",
         username: user.username || "",
         isActive: user.isActive,
       },
+
       dashboard: {
         stats: [
           { title: "LIVE PRICE", value: "$0.12" },
-          { title: "TOTAL DEPOSIT", value: `$${user.totalInvested?.toFixed(2) || "0.00"}` },
-          { title: "WALLET BALANCE", value: `$${user.walletBalance?.toFixed(2) || "0.00"}` },
-          { title: "TOTAL EARNINGS", value: `$${user.totalEarnings?.toFixed(2) || "0.00"}` },
-          { title: "ACTIVE PACKAGE", value: user.activePackage || "None" },
-          { title: "TEAM", value: totalReferrals.toString() },
+          {
+            title: "TOTAL DEPOSIT",
+            value: `$${user.totalInvested?.toFixed(2) || "0.00"}`,
+          },
+          {
+            title: "WALLET BALANCE",
+            value: `$${user.walletBalance?.toFixed(2) || "0.00"}`,
+          },
+          {
+            title: "TOTAL EARNINGS",
+            value: `$${user.totalEarnings?.toFixed(2) || "0.00"}`,
+          },
+          {
+            title: "ACTIVE PACKAGE",
+            value: user.activePackage || "None",
+          },
+
+          // 🔥 FULL TEAM COUNT
+          {
+            title: "TEAM",
+            value: totalTeam.toString(),
+          },
         ],
+
         profitTracker: {
           totalInvested: user.totalInvested || 0,
           totalEarnings: user.totalEarnings || 0,
           dailyIncome: user.dailyIncome || 0,
         },
+
         teamStats: {
-          totalReferrals,
+          // ✅ ONLY DIRECT
+          totalReferrals: directReferrals,
+
           referralEarnings: user.referralEarnings || 0,
         },
-        referralLink,           // ← Fixed
+
+        referralLink,
         tokenPrice: 0.12,
       },
     });
   } catch (error) {
     console.error("Dashboard Error:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard data",
