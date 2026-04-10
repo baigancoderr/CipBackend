@@ -30,10 +30,10 @@ const userSchema = new mongoose.Schema(
     },
 
     role: {
-  type: String,
-  enum: ["user", "admin"],
-  default: "user",
-},
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
 
     referredBy: {
       type: String,
@@ -82,8 +82,6 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
 
-
-
     // 🟢 Status
     isActive: {
       type: Boolean,
@@ -94,5 +92,27 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// ====================== DELETE HOOK ======================
+
+userSchema.pre("deleteOne", { document: true, query: false }, async function (next) {
+  try {
+    
+    if (this.referredBy && this.referredBy !== "SYSTEM") {
+      
+      await mongoose.model("User").updateOne(
+        { referralCode: this.referredBy },     // Referrer 
+        { $inc: { totalReferrals: -1 } }       // totalReferrals  -1
+      );
+
+      console.log(`✅ Referral count decreased for: ${this.referredBy} (User deleted: ${this.userId || this.telegramId})`);
+    }
+
+    next();
+  } catch (error) {
+    console.error("❌ Error in pre-delete hook:", error);
+    next(error);  
+  }
+});
 
 module.exports = mongoose.model("User", userSchema);
