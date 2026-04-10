@@ -383,11 +383,11 @@ const getDashboard = async (req, res) => {
           },
           { 
             title: "ACTIVE PACKAGE", 
-            value: `${user.activePackage} CIP` 
+            value: `${user.activePackage} ` 
           },
           { 
             title: "TEAM", 
-            value: `${user.totalReferrals} Users` 
+            value: `${user.totalReferrals} ` 
           },
         ],
         profitTracker: {
