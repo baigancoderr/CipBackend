@@ -66,7 +66,7 @@ router.options("/contactformmail", (req, res) => {
 router.post("/telegram-login", telegramLogin);
 
 // 👤 Profile
-router.get("/profile/:telegramId?", getUserProfile);
+router.get("/profile/:telegramId", getUserProfile);
 
 // const { CreateInvestment, claimDailyROI } = require("../controllers/userControllers/investmentController");
 
