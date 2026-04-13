@@ -3344,6 +3344,104 @@ const depositCallback = async (req, res) => {
 };
 
 
+// Update Walter if already Connected
+const updateWallet = async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+
+    // ✅ JWT se user identify
+    const userId = req.user.id || req.user._id;
+
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        message: "Wallet address required",
+      });
+    }
+
+    // ✅ isActive bhi check (tera middleware match kare)
+    const user = await User.findOneAndUpdate(
+      { _id: userId, isActive: true },
+      { walletAddress },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found or inactive",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Wallet updated successfully",
+      user,
+    });
+
+  } catch (error) {
+    console.error("Wallet update error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+// ADD Wallet If user is coming First Time
+const addWalletFirstTime = async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    const userId = req.user.id || req.user._id;
+
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        message: "Wallet address required",
+      });
+    }
+
+    // ✅ user find karo
+    const user = await User.findOne({ _id: userId, isActive: true });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // ❌ Agar already wallet hai
+    if (user.walletAddress && user.walletAddress !== "") {
+      return res.status(400).json({
+        success: false,
+        message: "Wallet already added, use update API",
+      });
+    }
+
+    // ✅ First time save
+    user.walletAddress = walletAddress;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Wallet added successfully",
+      user,
+    });
+
+  } catch (error) {
+    console.error("Add wallet error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+
+
 
 
 
@@ -3388,6 +3486,8 @@ module.exports = {
   CreateInvestment,
   createDeposit,
   depositCallback,
+  updateWallet,
+  addWalletFirstTime,
   
 
 };

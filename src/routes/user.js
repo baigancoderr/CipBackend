@@ -31,6 +31,8 @@ contactFormEmail,
   CreateInvestment,
    createDeposit,
   depositCallback,
+  updateWallet,
+  addWalletFirstTime,
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { investInPlan, getUserInvestments, getListedPlans } = require("../controllers/userControllers/investmentController");
@@ -125,6 +127,12 @@ router.post("/2fa/disable", authMiddleware(["user"]), disable2FA);
 // Wallet Address Update Routes
 router.post("/wallet/send-update-otp", authMiddleware(["user"]), sendWalletUpdateOTP);
 router.post("/wallet/update-address", authMiddleware(["user"]), updateWalletAddress);
+
+
+
+// Add Wallet Routes 
+router.post("/add-wallet", authMiddleware(), addWalletFirstTime);
+router.put("/update-wallet", authMiddleware(["user"]), updateWallet);
 
 
 router.get("/team-tree-view", authMiddleware(["user"]), getTeamTreeView);
