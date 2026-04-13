@@ -44,16 +44,17 @@ const telegramLogin = async (req, res) => {
     // Sirf active users ko consider karo
     const existingUser = await User.findOne({ telegramId, isActive: true });
 
-    if (existingUser) {
-      const token = generateToken(existingUser);
+   if (existingUser) {
+  const token = generateToken(existingUser);
 
-      return res.status(200).json({
-        success: true,
-        message: "Login successful",
-        token,
-        user: existingUser,
-      });
-    }
+  return res.status(200).json({
+    success: true,
+    message: "Login successful",
+    token,
+    user: existingUser,
+    isNewUser: false, // 🔥 ADD THIS
+  });
+}
 
     // ====================== NEW USER REGISTRATION ======================
     // Agar user nahi mila ya inactive hai → Naya account banao
@@ -69,12 +70,13 @@ const telegramLogin = async (req, res) => {
     } 
     // 🟡 OTHER USERS - Referral code zaroori hai
     else {
-      if (!referralCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Referral code is required",
-        });
-      }
+     if (!referralCode) {
+  return res.status(200).json({
+    success: false,
+    isNewUser: true,
+    message: "Referral required",
+  });
+}
 
       if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
         return res.status(400).json({
@@ -141,6 +143,7 @@ const telegramLogin = async (req, res) => {
       message: "User registered successfully",
       token,
       user,
+       isNewUser: true,
     });
 
   } catch (error) {
