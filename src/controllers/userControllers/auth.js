@@ -59,50 +59,51 @@ const telegramLogin = async (req, res) => {
     // ====================== NEW USER REGISTRATION ======================
     // Agar user nahi mila ya inactive hai → Naya account banao
 
-    const userCount = await User.countDocuments({ isActive: true });
+   // Count active users
+const userCount = await User.countDocuments({ isActive: true });
 
-    let refUser = null;
-    let finalReferral = null;
+let refUser = null;
+let finalReferral = null;
 
-    // 🟢 FIRST USER (System ka pehla user)
-    if (userCount === 0) {
-      finalReferral = "SYSTEM";
-    } 
-    // 🟡 OTHER USERS - Referral code zaroori hai
-    else {
-     if (!referralCode) {
-  return res.status(200).json({
-    success: false,
-    isNewUser: true,
-    message: "Referral required",
-  });
+// ✅ FIRST USER
+if (userCount === 0) {
+  finalReferral = "SYSTEM";
+} 
+// ✅ OTHER USERS
+else {
+  if (!referralCode) {
+    return res.status(200).json({
+      success: false,
+      isNewUser: true,
+      message: "Referral required",
+    });
+  }
+
+  if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid referral code format",
+    });
+  }
+
+  refUser = await User.findOne({ referralCode, isActive: true });
+
+  if (!refUser) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid referral code",
+    });
+  }
+
+  if (refUser.telegramId === telegramId) {
+    return res.status(400).json({
+      success: false,
+      message: "You cannot use your own referral code",
+    });
+  }
+
+  finalReferral = referralCode;
 }
-
-      if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid referral code format",
-        });
-      }
-
-      refUser = await User.findOne({ referralCode, isActive: true });
-
-      if (!refUser) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid referral code",
-        });
-      }
-
-      if (refUser.telegramId === telegramId) {
-        return res.status(400).json({
-          success: false,
-          message: "You cannot use your own referral code",
-        });
-      }
-
-      finalReferral = referralCode;
-    }
 
     // 🔥 Generate Unique ID
     const uniqueId = await generateUniqueId();
