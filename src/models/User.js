@@ -61,6 +61,16 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
 
+
+      wallets: {
+      referral: {
+        amount: { type: Number, default: 0 },
+      },
+      roi: {
+        amount: { type: Number, default: 0 },
+      },
+    },
+
     totalEarnings: {
       type: Number,
       default: 0,

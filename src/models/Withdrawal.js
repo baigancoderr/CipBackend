@@ -9,8 +9,21 @@ const withdrawalSchema = new mongoose.Schema({
   withdrawalFee: { type: Number, required: true },
   withdrawalFeePercentage: { type: Number, required: true },
   // walletType: { type: String, enum: ["principal", "my", "deposit", "emgt", "referral"], required: true },
-  walletType: { type: String, enum: ["principal", "my", "deposit", "referral"], required: true },
-  currencyType: { type: String, enum: ["USDT", "EMGT"], default: "USDT" },
+  // walletType: { type: String, enum: ["principal", "my", "deposit", "referral"], required: true },
+  // currencyType: { type: String, enum: ["USDT", "EMGT"], default: "USDT" },
+
+walletType: { 
+  type: String, 
+  enum: ["referral", "roi"], 
+  required: true 
+},
+
+currencyType: { 
+  type: String, 
+  enum: ["USDT", "USDC"], 
+  default: "USDC" 
+},
+
   status: { type: String, enum: ["pending", "completed", "rejected"], default: "pending" },
   walletAddress: { type: String, required: true },
   transactionHash: { type: String, unique: true }, 

@@ -119,6 +119,11 @@ else {
       referredBy: finalReferral,
 
       walletBalance: 0,
+
+        wallets: {
+    referral: { amount: 1000 },
+    roi: { amount: 1000 },
+  },
       totalReferrals: 0,
       referralEarnings: 0,
       totalInvested: 0,
