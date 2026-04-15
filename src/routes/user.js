@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { telegramLogin } = require("../controllers/userControllers/auth");
+const { telegramLogin ,getMe } = require("../controllers/userControllers/auth");
 
 const {
   getUserStakedPlans,
@@ -66,6 +66,7 @@ router.options("/contactformmail", (req, res) => {
 
 // 🔥 Telegram Login
 router.post("/telegram-login", telegramLogin);
+router.get("/me", authMiddleware(), getMe);
 
 // 👤 Profile
 // router.get("/profile/:telegramId", getUserProfile);
