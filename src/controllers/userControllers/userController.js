@@ -3096,75 +3096,91 @@ const createDeposit = async (req, res) => {
   try {
     const { userId, amount, network } = req.body;
 
+    // 🔐 Validation
     if (!userId) {
       return res.status(400).json({ success: false, message: "userId required" });
     }
 
     if (!amount || Number(amount) <= 0) {
-      return res.status(400).json({ success: false, message: "Valid amount is required" });
+      return res.status(400).json({ success: false, message: "Valid amount required" });
     }
 
+    // 👤 User Check
     const user = await User.findOne({ userId });
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    // 🌐 Network Check
     const config = NETWORK_CONFIG[network];
     if (!config) {
-      return res.status(400).json({ success: false, message: `Invalid network: ${network}` });
+      return res.status(400).json({ success: false, message: "Invalid network" });
     }
 
     if (!config.wallet) {
-      return res.status(500).json({ success: false, message: `${network} wallet not configured` });
+      return res.status(500).json({ success: false, message: "Wallet not configured" });
     }
 
+    // 🔔 Callback URL
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
 
-    console.log(`Creating ${network} deposit for user ${userId}`);
+    console.log(`🚀 Creating ${network} deposit for ${userId}`);
 
+    // 🌍 CryptAPI Call
     const response = await axios.get(config.url, {
       params: {
         address: config.wallet,
         callback: callbackUrl,
         order_id: userId,
-        multi_token: 1,        
-        json: 1,
+        multi_token: 1,
+        json: 1
       }
     });
 
-    // for error
-    if (response.data?.status === "error" || !response.data?.address_in) {
-      const errMsg = response.data?.message || response.data?.error || "CryptAPI error";
-      console.error("CryptAPI Error:", response.data);
+    const data = response.data;
+
+    //  Error Handling
+    if (data?.status === "error" || !data?.address_in) {
+      const errMsg = data?.message || data?.error || "CryptAPI error";
+      console.error("❌ CryptAPI Error:", data);
       return res.status(400).json({ success: false, message: errMsg });
     }
 
+    // 💾 Save Deposit
     const deposit = await Deposit.create({
       userId: user._id,
-      depositAddress: response.data.address_in,
+      depositAddress: data.address_in,
       amount: Number(amount),
       coin: config.coin,
       network,
       status: "pending"
     });
 
-    res.json({
+    // ✅ FULL RESPONSE (frontend friendly)
+    return res.json({
       success: true,
-      data: response.data,
-      depositId: deposit._id
+      message: "Deposit address generated",
+
+      depositId: deposit._id,
+
+      deposit: {
+        address: data.address_in,         
+        qr_code: data.qr_code || null,     
+        coin: config.coin,                
+        network: network,                
+        amount: Number(amount),          
+      },
+
+      raw: data 
     });
 
   } catch (err) {
-    console.error("Full Deposit Error:", err.response?.data || err.message);
-    
-    let message = "Deposit failed";
-    if (err.response?.data?.message) {
-      message = err.response.data.message;
-    } else if (err.message) {
-      message = err.message;
-    }
+    console.error("❌ Deposit Error:", err.response?.data || err.message);
 
-    res.status(500).json({ success: false, message });
+    return res.status(500).json({
+      success: false,
+      message: err.response?.data?.message || err.message || "Deposit failed"
+    });
   }
 };
 
@@ -3313,7 +3329,6 @@ const depositCallback = async (req, res) => {
   try {
     console.log("🔔 Callback Hit");
 
-    // 🔥 FULL RAW DATA (NO LOSS)
     const fullData = {
       ...req.query,
       ...req.body
@@ -3331,97 +3346,106 @@ const depositCallback = async (req, res) => {
 
     // 🔐 Secret Check
     if (secret !== process.env.CRYPTAPI_SECRET) {
-      await logCallback({
-        req,
-        data: fullData,
-        status: "failed",
-        message: "Invalid secret"
-      });
+      await logCallback({ req, data: fullData, status: "failed", message: "Invalid secret" });
       return res.send("Invalid secret");
     }
 
     // 💰 Amount Check
     const amount = parseFloat(value);
     if (isNaN(amount) || amount <= 0) {
-      await logCallback({
-        req,
-        data: fullData,
-        status: "failed",
-        message: "Invalid amount"
-      });
+      await logCallback({ req, data: fullData, status: "failed", message: "Invalid amount" });
       return res.send("Invalid amount");
     }
 
     // ⛓️ Confirmation Check
     if (!confirmations || Number(confirmations) < 2) {
-      await logCallback({
-        req,
-        data: fullData,
-        status: "pending",
-        message: "Waiting confirmations"
-      });
-      return res.send("Waiting for confirmations");
+      await logCallback({ req, data: fullData, status: "pending", message: "Waiting confirmations" });
+      return res.send("Waiting confirmations");
     }
 
-    // 🔍 Find Deposit
-    const deposit = await Deposit.findOne({
-      depositAddress: address_in
-    });
+    // ❗ TXID REQUIRED (VERY IMPORTANT)
+    if (!txid || txid.trim() === "") {
+      await logCallback({ req, data: fullData, status: "pending", message: "TXID not yet available" });
+      return res.send("Waiting for TXID");
+    }
+
+    // 🔒 ATOMIC UPDATE (DOUBLE CREDIT FIX)
+    const deposit = await Deposit.findOneAndUpdate(
+      {
+        depositAddress: address_in,
+        status: "pending"
+      },
+      {
+        status: "processing"
+      },
+      { new: true }
+    );
 
     if (!deposit) {
       await logCallback({
         req,
         data: fullData,
-        status: "failed",
-        message: "Deposit not found"
-      });
-      return res.send("Deposit not found");
-    }
-
-    // 🔁 Duplicate Protection
-    if (deposit.status === "completed") {
-      await logCallback({
-        req,
-        data: fullData,
         status: "duplicate",
-        message: "Already processed",
-        network: deposit.network
+        message: "Already processed or not found"
       });
       return res.send("Already processed");
     }
 
-    // 👤 Find User
-    const user = await User.findById(deposit.userId);
-    if (!user) {
-      await logCallback({
-        req,
-        data: fullData,
-        status: "failed",
-        message: "User not found",
-        network: deposit.network
-      });
-      return res.send("User not found");
-    }
+    // 💸 Duplicate TXID check
+    const existingTx = await Deposit.findOne({
+      transactionHash: txid,
+      _id: { $ne: deposit._id }
+    });
 
-    // 💸 OPTIONAL: Prevent duplicate TXID
-    const existingTx = await Deposit.findOne({ transactionHash: txid });
     if (existingTx) {
       await logCallback({
         req,
         data: fullData,
         status: "duplicate",
-        message: "Duplicate TXID",
-        network: deposit.network
+        message: "Duplicate TXID"
       });
       return res.send("Duplicate TX");
     }
 
-    // 💰 Credit Wallet
-   user.wallets.deposit.amount =
-  (user.wallets?.deposit?.amount || 0) + amount;
+    // 💰 Amount Validation (optional strict)
+    if (amount < deposit.amount) {
+      deposit.status = "failed";
+      await deposit.save();
+
+      await logCallback({
+        req,
+        data: fullData,
+        status: "failed",
+        message: "Amount less than expected"
+      });
+
+      return res.send("Amount too low");
+    }
+
+    // 👤 Find User
+    const user = await User.findById(deposit.userId);
+    if (!user) {
+      deposit.status = "failed";
+      await deposit.save();
+
+      await logCallback({
+        req,
+        data: fullData,
+        status: "failed",
+        message: "User not found"
+      });
+
+      return res.send("User not found");
+    }
+
+    // 💰 SAFE Deposit Wallet Credit
+    if (!user.wallets) user.wallets = {};
+    if (!user.wallets.deposit) user.wallets.deposit = { amount: 0 };
+
+    user.wallets.deposit.amount += amount;
     await user.save();
 
-    // 🧾 Update Deposit
+    // 🧾 Final Deposit Update
     deposit.status = "completed";
     deposit.transactionHash = txid;
     deposit.creditedAmount = amount;
@@ -3435,8 +3459,7 @@ const depositCallback = async (req, res) => {
       req,
       data: fullData,
       status: "success",
-      message: "Deposit credited",
-      network: deposit.network
+      message: "Deposit credited"
     });
 
     console.log("✅ Deposit SUCCESS:", {
@@ -3452,10 +3475,7 @@ const depositCallback = async (req, res) => {
 
     await logCallback({
       req,
-      data: {
-        ...req.query,
-        ...req.body
-      },
+      data: { ...req.query, ...req.body },
       status: "error",
       message: error.message
     });
