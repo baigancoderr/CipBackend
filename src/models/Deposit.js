@@ -9,7 +9,8 @@ const depositSchema = new mongoose.Schema({
   currency: { type: String, default: "USDT" },
   network: { type: String, required: true },
 
-  depositAddress: { type: String, required: true },
+  // depositAddress: { type: String, required: true },
+  depositAddress: { type: String, required: false },
 
   // transactionHash: { type: String, default: null },
   transactionHash: {
@@ -18,12 +19,18 @@ const depositSchema = new mongoose.Schema({
   sparse: true
 },
 
-  status: {
-    type: String,
-    enum: ["pending", "completed", "failed"],
-    default: "pending",
-  },
+  // status: {
+  //   type: String,
+  //   enum: ["pending", "completed", "failed"],
+  //   default: "pending",
+  // },
 
+  status: {
+  type: String,
+  enum: ["initiated", "pending", "processing", "completed", "failed"],
+  default: "initiated",
+},
+callbackUrl: { type: String }, 
   createdAt: { type: Date, default: Date.now },
 });
 
