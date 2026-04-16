@@ -11,7 +11,12 @@ const depositSchema = new mongoose.Schema({
 
   depositAddress: { type: String, required: true },
 
-  transactionHash: { type: String, default: null },
+  // transactionHash: { type: String, default: null },
+  transactionHash: {
+  type: String,
+  unique: true,
+  sparse: true
+},
 
   status: {
     type: String,

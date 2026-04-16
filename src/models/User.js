@@ -69,6 +69,9 @@ const userSchema = new mongoose.Schema(
       roi: {
         amount: { type: Number, default: 0 },
       },
+       deposit: {
+    amount: { type: Number, default: 0 },   
+  },
     },
 
     totalEarnings: {

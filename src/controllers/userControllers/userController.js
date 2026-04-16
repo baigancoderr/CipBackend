@@ -3417,7 +3417,8 @@ const depositCallback = async (req, res) => {
     }
 
     // 💰 Credit Wallet
-    user.wallet = (user.wallet || 0) + amount;
+   user.wallets.deposit.amount =
+  (user.wallets?.deposit?.amount || 0) + amount;
     await user.save();
 
     // 🧾 Update Deposit
