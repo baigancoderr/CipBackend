@@ -33,6 +33,7 @@ contactFormEmail,
   depositCallback,
   updateWallet,
   addWalletFirstTime,
+  getDeposits,
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { investInPlan, getUserInvestments, getListedPlans } = require("../controllers/userControllers/investmentController");
@@ -176,11 +177,15 @@ router.post("/logout", authMiddleware(["user"]), logout);
 
 
 // 💸 Create deposit
-router.post("/deposit/create", createDeposit);
+// router.post("/deposit/create", createDeposit);
+router.post("/deposit/create", authMiddleware(["user"]), createDeposit);
+router.get('/deposit-history', authMiddleware(["user"]), getDeposits);
 
 // 🔁 Callback (IMPORTANT)
 
 router.get("/deposit/callback", depositCallback);
 router.post("/deposit/callback", depositCallback); // 👈 for testing
+
+
 
 module.exports = router;

@@ -3617,6 +3617,69 @@ const depositCallback = async (req, res) => {
 
 
 
+const getDeposits = async (req, res) => {
+  try {
+    const userId = req.user.id; // from JWT middleware
+
+    let { page = 1, startDate, endDate } = req.query;
+
+    page = parseInt(page) || 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    // 🔍 Build filter
+    const filter = {
+      userId: userId
+    };
+
+    // 📅 Date filter (optional)
+    if (startDate || endDate) {
+      filter.createdAt = {};
+
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // 📊 Total count
+    const total = await Deposit.countDocuments(filter);
+
+    // 📦 Fetch deposits
+    const deposits = await Deposit.find(filter)
+      .sort({ createdAt: -1 }) // latest first
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.json({
+      success: true,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        limit
+      },
+      deposits
+    });
+
+  } catch (error) {
+    console.error("❌ Get Deposits Error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+
+
+
 
 const logCallback = async ({
   req,
@@ -3802,6 +3865,7 @@ module.exports = {
   depositCallback,
   updateWallet,
   addWalletFirstTime,
+  getDeposits,
   
 
 };
