@@ -3220,8 +3220,9 @@ const createDeposit = async (req, res) => {
     });
 
     // 🔔 Callback URL
-    const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
-
+    // const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}`;
+       const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}&order_id=${deposit._id}`;
+   
     // 🌍 CryptAPI call
     const response = await axios.get(config.url, {
       params: {
@@ -3246,6 +3247,7 @@ const createDeposit = async (req, res) => {
     // 🧾 Update deposit
     deposit.depositAddress = data.address_in;
     deposit.callbackUrl = callbackUrl; // ✅ save for history
+    deposit.uuid = data.uuid;
     deposit.status = "pending";
     await deposit.save();
 
@@ -3475,27 +3477,26 @@ const logCallback = async ({
 
 
 
-
 const depositCallback = async (req, res) => {
   try {
     console.log("🔔 Callback Hit");
 
-    const fullData = {
+    const data = {
       ...req.query,
       ...req.body
     };
 
-    console.log("📦 FULL DATA:", fullData);
+    console.log("📦 FULL DATA:", data);
 
     const {
+      uuid,
       value,
       value_coin,
       txid,
       txid_in,
       confirmations,
-      secret,
-      order_id
-    } = fullData;
+      secret
+    } = data;
 
     const finalTxid = txid_in || txid;
     const finalAmount = parseFloat(value_coin || value);
@@ -3505,14 +3506,11 @@ const depositCallback = async (req, res) => {
       return res.send("Invalid secret");
     }
 
-    // ❗ ObjectId validation
-    if (!order_id || !mongoose.Types.ObjectId.isValid(order_id)) {
-      return res.send("Invalid deposit id");
-    }
+    // 🔍 Find deposit using UUID (NOT order_id)
+    const deposit = await Deposit.findOne({ uuid });
 
-    // 🔍 Find deposit
-    const deposit = await Deposit.findById(order_id);
     if (!deposit) {
+      console.log("❌ Deposit not found for uuid:", uuid);
       return res.send("Deposit not found");
     }
 
@@ -3521,7 +3519,7 @@ const depositCallback = async (req, res) => {
       return res.send("Already processed");
     }
 
-    // 💰 Amount basic check (only valid number)
+    // 💰 Amount validation
     if (isNaN(finalAmount) || finalAmount <= 0) {
       return res.send("Invalid amount");
     }
@@ -3532,7 +3530,7 @@ const depositCallback = async (req, res) => {
     }
 
     // ❗ TXID check
-    if (!finalTxid || finalTxid.trim() === "") {
+    if (!finalTxid) {
       return res.send("Waiting TXID");
     }
 
@@ -3557,7 +3555,7 @@ const depositCallback = async (req, res) => {
       return res.send("User not found");
     }
 
-    // 💸 Wallet credit (whatever comes)
+    // 💸 Credit wallet
     if (!user.wallets) user.wallets = {};
     if (!user.wallets.deposit) user.wallets.deposit = { amount: 0 };
 
@@ -3567,7 +3565,7 @@ const depositCallback = async (req, res) => {
     // 🧾 Final update
     deposit.status = "completed";
     deposit.transactionHash = finalTxid;
-    deposit.creditedAmount = finalAmount; // 👈 actual credited
+    deposit.creditedAmount = finalAmount;
     deposit.confirmations = Number(confirmations);
     deposit.completedAt = new Date();
 

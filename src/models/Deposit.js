@@ -30,6 +30,10 @@ const depositSchema = new mongoose.Schema({
   enum: ["initiated", "pending", "processing", "completed", "failed"],
   default: "initiated",
 },
+  uuid: {
+    type: String,
+    index: true
+  }, 
 callbackUrl: { type: String }, 
   createdAt: { type: Date, default: Date.now },
 });
