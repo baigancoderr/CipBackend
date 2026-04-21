@@ -125,6 +125,7 @@ router.get("/get-kyc-history", authMiddleware(["user"]), getMyKYCHistory);
 
 // 2FA Routes
 router.get("/2fa/status", authMiddleware(["user"]), get2FAStatus);
+
 router.post("/2fa/generate", authMiddleware(["user"]), generate2FA);
 router.post("/2fa/verify", authMiddleware(["user"]), verify2FA);
 router.post("/2fa/disable", authMiddleware(["user"]), disable2FA);
