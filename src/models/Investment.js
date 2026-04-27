@@ -9,17 +9,45 @@ const investmentSchema = new mongoose.Schema(
 
     amount: {
       type: Number,
-      required: true,
+      required: true, // fiat amount (USDC/SGN value)
     },
 
+    // ====================== TOKEN FIELDS (NEW) ======================
+    tokensReceived: {
+      type: Number,
+      required: true, // amount / current SGN price
+    },
+
+    sgnPriceAtInvestment: {
+      type: Number,
+      required: true, // SGN price jab investment hua tha
+    },
+
+    // ====================== RETURN IN FIAT ======================
     totalReturn: {
-      type: Number, // amount * 1.1
-      required: true,
+      type: Number,
+      required: true, // amount * 1.1 (fiat me)
+    },
+
+    totalDays: {
+      type: Number,
+      default: 700,
     },
 
     dailyIncome: {
-      type: Number, // totalReturn / 700
-      required: true,
+      type: Number,
+      required: true, // totalReturn / 700 (fiat me)
+    },
+
+    // ====================== RETURN IN TOKEN (NEW) ======================
+    totalReturnTokens: {
+      type: Number,
+      required: true, // tokensReceived * 1.1
+    },
+
+    dailyIncomeTokens: {
+      type: Number,
+      required: true, // totalReturnTokens / 700
     },
 
     totalDays: {
@@ -48,8 +76,8 @@ const investmentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "completed"],
-      default: "active",
+      enum: ["PENDING", "active", "completed", "rejected"], // ← PENDING bhi add kiya
+      default: "PENDING",
     },
   },
   { timestamps: true }

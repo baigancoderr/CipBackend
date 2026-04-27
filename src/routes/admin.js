@@ -53,28 +53,7 @@ const {
 const {verifyKYC, getAllKYC} = require("../controllers/userControllers/kycController");
 const {adminUpdateUserDetails} = require("../controllers/adminControllers/userUpdateController");
 
-const {
-  createIncomeConfig,
-  getAllIncomeConfigs,
-  getIncomeConfigById,
-  updateIncomeConfig,
-  deleteIncomeConfig,
-} = require("../controllers/adminControllers/incomeConfigController");
-
 const multer = require('multer');
-// Property Controllers
-const {registerProperty,getPropertyById, getAllProperties, updateProperty, deleteProperty, getPropertyLogs } = require("../controllers/adminControllers/propertyController");
-const {  registerPlan,
-  getAllPlans,
-  getPlanById,
-  updatePlan,
-  deletePlan,
-  getPlanLogs,
-  addPointsToUser,
-  updateInvestmentStatus
-} = require("../controllers/adminControllers/planController");
-
-// Package Controllers
 const authMiddleware = require("../middleware/authMiddleware");
 
 router.post("/auth/signup", signup);
@@ -110,31 +89,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Property Routes (Admin)
-router.post('/property/register', authMiddleware(["admin"]), upload.array('images', 10), registerProperty); // Max 10 images
-router.get('/properties', authMiddleware(["admin"]), getAllProperties);
-router.get('/property/:propertyId', authMiddleware(["admin"]), getPropertyById);
-router.put('/property/update/:propertyId', authMiddleware(["admin"]), upload.array('images', 10), updateProperty); // Allow image updates
-router.delete('/property/delete/:propertyId', authMiddleware(["admin"]), deleteProperty);
-router.get('/property/logs/:propertyId?', authMiddleware(["admin"]), getPropertyLogs);
 
-// Plan 
-router.post('/plan/create',authMiddleware(["admin"]), upload.array('images', 2), registerPlan);
-router.get('/plans', authMiddleware(["admin"]), getAllPlans);
-router.get('/plan/:planId', authMiddleware(["admin"]), getPlanById);
-router.put('/plan/update/:planId', authMiddleware(["admin"]), upload.array('images', 2), updatePlan); 
-router.delete('/plan/delete/:planId', authMiddleware(["admin"]), deletePlan);
-router.get('/plan/logs/:planId?', authMiddleware(["admin"]), getPlanLogs);
-router.post('/plan/add-points', authMiddleware(["admin"]), addPointsToUser);
-router.put('/plan/update-investment-status/:investmentId', authMiddleware(["admin"]), updateInvestmentStatus);
-
-// Income Config Routes (Admin Only)
-
-router.post("/config/income-config", authMiddleware(["admin"]), createIncomeConfig);
-router.get("/config/income-configs", authMiddleware(["admin"]), getAllIncomeConfigs);
-router.get("/config/income-config/:id", authMiddleware(["admin"]), getIncomeConfigById);
-router.put("/config/income-config/:id", authMiddleware(["admin"]), updateIncomeConfig);
-router.delete("/config/income-config/:id", authMiddleware(["admin"]), deleteIncomeConfig);
 
 // All Income and Reward and history (Admin Only)
 

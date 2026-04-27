@@ -1,73 +1,69 @@
 const Investment = require("../models/Investment");
-const Property = require("../models/Property");
 const User = require("../models/User");
-const RoiDistribution = require("../models/RoiDistribution"); 
-
+const RoiDistribution = require("../models/RoiDistribution");
 
 async function distributeDailyROI() {
   try {
     const now = new Date();
-    const activeInvestments = await Investment.find({ status: "ACTIVE" });
-    const DEFAULT_RENTAL_PERCENTAGE = 4;
+
+    // Find all ACTIVE investments that are still within their period
+    const activeInvestments = await Investment.find({
+      status: "active",
+      endDate: { $gt: now },
+    });
+
+    console.log(`[Daily ROI] Found ${activeInvestments.length} active investments to process`);
 
     for (const investment of activeInvestments) {
-      const user = await User.findOne({ user_id: investment.user_id });
-      if (!user) continue;
-
-      const property = await Property.findOne({ property_id: investment.property_id });
-      if (!property) continue;
-
-      // Check if investment is still within 25 months from creation date
-      const investmentStart = new Date(investment.createdAt);
-      const endDate = new Date(investmentStart);
-      endDate.setMonth(endDate.getMonth() + 25); // Add 25 months
-      if (now > endDate) {
-        // Stop ROI after 25 months: Update status to expired or inactive
-        investment.status = "EXPIRED";
-        await investment.save();
-        continue; // Skip distribution
+      // Get user
+      const user = await User.findOne({ userId: investment.userId });
+      if (!user) {
+        console.log(`[Daily ROI] User not found for investment ${investment._id}`);
+        continue;
       }
 
-      // Use property's rental_percentage if available, else default
-      const rentalPercentage = property.rental_percentage || DEFAULT_RENTAL_PERCENTAGE;
+      // Calculate today's ROI (in tokens)
+      const dailyTokens = investment.dailyIncomeTokens || 0;
 
-      // Fetch monthly rate from property's rental_percentage (monthly %)
-      const monthlyRate = rentalPercentage / 100; // e.g., 4% -> 0.04
+      // ====================== CREDIT TO ROI WALLET ======================
+      user.wallets = user.wallets || { roi: { amount: 0 } };
+      user.wallets.roi.amount = (user.wallets.roi.amount || 0) + dailyTokens;
 
-      const workingDaysInMonth = 30; // Approx. working days in a month
-      const dailyRate = monthlyRate / workingDaysInMonth; // Daily portion on working days
+      console.log(`[Daily ROI] Crediting ${dailyTokens.toFixed(8)} tokens to user ${user.userId} (Investment: ${investment._id})`);
 
-      // Use full invested amount for effective ROI calculation
-      const effectiveAmount = investment.amount_usd;
+      // Update total earnings
+      user.totalEarnings = (user.totalEarnings || 0) + dailyTokens;
 
-      // Calculate daily income
-      const dailyIncome = effectiveAmount * dailyRate;
-      const dailyROIPercent = dailyRate * 100; // Percentage for logging
-
-      // Credit to myWallet
-      user.myWallet.amount += dailyIncome;
-      user.totalRoiRewards += dailyIncome;
-      user.totalAllRewards += dailyIncome;
       await user.save();
 
-      console.log(`Daily ROI of ${dailyIncome} credited to user ${user.user_id} for investment ${investment._id}`);
+      // ====================== UPDATE INVESTMENT ======================
+      investment.claimedDays += 1;
+      investment.lastClaimedAt = now;
 
-      // Log ROI income using RoiDistribution
+      // If fully claimed → mark as completed
+      if (investment.claimedDays >= investment.totalDays) {
+        investment.status = "completed";
+      }
+
+      await investment.save();
+
+      // ====================== LOG ROI DISTRIBUTION ======================
       await RoiDistribution.create({
         userId: user._id,
-        user_id: user.user_id,
-        stakeId: investment.property_id, // Assuming Investment is Stake model
-        amount: dailyIncome,
-        dailyROI: dailyROIPercent,
-        stakeAmount: investment.amount_usd,
+        user_id: user.userId,
+        investmentId: investment._id,           // reference to this investment
+        amount: dailyTokens,                    // tokens received today
+        dailyROI: investment.dailyIncomeTokens, // for reference
+        stakeAmount: investment.amount,         // original investment amount
+        date: now,
       });
 
-      // Optional: Update next_payout_date to tomorrow
-      investment.next_payout_date = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      await investment.save();
+      console.log(`✅ Daily ROI credited: ${dailyTokens.toFixed(8)} tokens → User ${user.userId} (Investment: ${investment._id})`);
     }
+
+    console.log(`[Daily ROI] Distribution completed successfully`);
   } catch (error) {
-    console.error("Error distributing daily ROI:", error);
+    console.error("❌ Error distributing daily ROI:", error);
   }
 }
 

@@ -37,7 +37,7 @@ contactFormEmail,
   getDeposits,
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
-const { investInPlan, getUserInvestments, getListedPlans } = require("../controllers/userControllers/investmentController");
+const { investInPlan, getUserInvestments } = require("../controllers/userControllers/investmentController");
 
 const { createQrDeposit, paymentCallback } = require('../controllers/userControllers/depositController');
 const { submitKYC, getMyKYC, getMyKYCHistory } = require("../controllers/userControllers/kycController");
@@ -112,7 +112,6 @@ router.get("/wallet", authMiddleware(["user"]), getWalletDetails);
 // Property Investment Routes (User)
 router.post('/plan/invest', authMiddleware(["user"]), investInPlan);
 router.get('/investments', authMiddleware(["user"]), getUserInvestments);
-router.get('/plan/listed', authMiddleware(["user"]), getListedPlans);
 
 // Swap Routes (User)
 router.post("/swap/deposit-to-token", authMiddleware(["user"]), swapDepositToToken);

@@ -1,13 +1,10 @@
 const Investment = require("../../models/Investment");
-const Plan = require("../../models/Plan");
 const User = require("../../models/User");
+const Price = require("../../models/Price");
 const { successResponse, errorResponse } = require("../../utils/responses");
 const {
-  distributeDirectReferral,
+  distributeReferralIncome,
 } = require("../../services/referralIncomeDistributionService");
-const {
-  distributeLevelIncome,
-} = require("../../services/levelIncomeDistributionService");
 const mongoose = require("mongoose");
 
 // ====================== USER SIDE ======================
@@ -16,60 +13,92 @@ const investInPlan = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { productId, quantity, transactionHash, walletAddress } = req.body;
+    const { telegramId, amount } = req.body;
     const urId = req.user.id;
 
     // Validation
-    if (!productId || !quantity || !transactionHash || !walletAddress) {
-      return res.status(400).json(errorResponse("productId, quantity, transactionHash and walletAddress are required"));
+    if (!telegramId || !amount) {
+      return res
+        .status(400)
+        .json(errorResponse("telegramId and amount are required"));
     }
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      return res.status(400).json(errorResponse("Quantity must be a positive integer"));
-    }
+    const user = await User.findOne({ telegramId });
 
-    const plan = await Plan.findOne({ plan_id: productId }).session(session);
-    if (!plan) {
-      await session.abortTransaction();
-      return res.status(404).json(errorResponse("Plan not found"));
-    }
-
-    if (plan.quantity < quantity) {
-      await session.abortTransaction();
-      return res.status(400).json(errorResponse(`Only ${plan.quantity} units available in this plan`));
-    }
-
-    // ✅ Amount automatically set according to quantity
-    const amount = quantity * Number(plan.investment_amount);
-
-    const user = await User.findById(urId).session(session);
     if (!user) {
-      await session.abortTransaction();
-      return res.status(404).json(errorResponse("User not found"));
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
-    const investment = new Investment({
-      userId: user._id,           // agar model mein hai
-      user_id: user.user_id,
-      productId,
-      quantity,
-      amount,                     // ← Auto calculated
-      transactionHash,
-      walletAddress,
-      status: "PENDING",
+    // 💰 Balance check
+    if (user.walletBalance < amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient balance",
+      });
+    }
+
+    // 💸 Deduct balance
+    user.walletBalance -= amount;
+    user.totalInvested += amount;
+    await user.save();
+
+    // 📊 Get current SGN price
+    const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
+    if (!sgnPriceDoc) {
+      return res.status(500).json(errorResponse("SGN price not found"));
+    }
+
+    const sgnPrice = sgnPriceDoc.price;
+    const tokensReceived = parseFloat((amount / sgnPrice).toFixed(8));
+
+    const totalReturn = tokensReceived * 1.1;
+    const totalReturnTokens = parseFloat((tokensReceived * 1.1).toFixed(8));
+
+    const dailyIncome = totalReturn / 700;
+    const dailyIncomeTokens = totalReturnTokens / 700;
+
+    const totalDays = 700;
+
+    // 📅 End Date
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + totalDays);
+
+    // 🆕 Save investment
+    const investment = await Investment.create({
+      userId: user.userId,
+      amount,
+      tokensReceived,
+      sgnPriceAtInvestment: sgnPrice,
+      totalReturn,
+      dailyIncome,
+      totalReturnTokens,
+      dailyIncomeTokens,
+      totalDays,
+      endDate,
+      status: "active",
     });
 
-    await investment.save({ session });
+    await distributeReferralIncome(
+      user.userId, 
+      amount, 
+      "SGN_DIRECT_INVEST",           // productId placeholder (for logging)
+      { session }
+    );
+
     await session.commitTransaction();
 
     res.status(201).json(
-      successResponse("Investment request submitted successfully. Waiting for admin approval.", {
-        requestId: investment._id,
-        productId,
-        quantity,
-        calculatedAmount: amount,   // frontend ko exact amount dikhaane ke liye
-        status: "PENDING"
-      })
+      successResponse(
+        "Investment request submitted successfully",
+        {
+          investmentId: investment._id,
+          amount: investment.amount,
+          totalReturn: investment.totalReturn,
+        },
+      ),
     );
   } catch (error) {
     await session.abortTransaction();
@@ -79,23 +108,6 @@ const investInPlan = async (req, res) => {
     session.endSession();
   }
 };
-
-// ====================== ADMIN SIDE ======================
-
-// Get all pending requests
-const getPendingInvestments = async (req, res) => {
-  try {
-    const pending = await Investment.find({ status: "PENDING" })
-      .populate("user_id", "user_id name email")
-      .sort({ createdAt: -1 });
-
-    res.status(200).json(successResponse("Pending investments", pending));
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-////////////////////
 
 const getUserInvestments = async (req, res) => {
   try {
@@ -149,34 +161,7 @@ const getUserInvestments = async (req, res) => {
   }
 };
 
-const getListedPlans = async (req, res) => {
-  try {
-    // Fetch all plans with quantity > 0 (assuming "listed" means available for investment)
-    const listedPlans = await Plan.find({
-      quantity: { $gt: 0 },
-    }).lean();
-
-    if (!listedPlans.length) {
-      return res.status(404).json(errorResponse("No listed plans found"));
-    }
-
-    res
-      .status(200)
-      .json(
-        successResponse(
-          "Listed plans retrieved successfully",
-          listedPlans,
-        ),
-      );
-  } catch (error) {
-    console.error("Error fetching listed plans:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
 module.exports = {
-  getPendingInvestments,
   investInPlan,
   getUserInvestments,
-  getListedPlans,
 };
