@@ -19,33 +19,16 @@ const {
   getAllDeposits,
   setTokenPrice,
   getAdminReport,
-  createBonanzaPlan,
-  getAllBonanzaPlans,
-  updateBonanzaPlan,
-  deleteBonanzaPlan,
   getStakingProfits,
   approveWithdrawal,
   getWithdrawals,
-  adminManageStake,
   getAllInvestmentReport,
   getDailyRoiHistory,
-  getLevelIncomeHistory,
   getReferralIncomeReport,
-  getBinaryIncomeReport,
-  getLeadershipShareReport,
-  getLeadershipIncomeReport,
-  getBonanzaRewardsReport,
-  getSwapReport,
-  getReinvestReport,
   getTransferReport,
   getTransactionHistoryAdmin,
   getAdminLoginLog,
   updateAdminEmailPassword,
-  createLevelPlan,
-  getAllLevelPlans,
-  updateLevelPlan,
-  deleteLevelPlan,
-  getAllLevelIncomeRewards,
   getRankAchievementHistory,
   adminLogout,
 } = require("../controllers/adminControllers/adminController");
@@ -100,30 +83,7 @@ router.get(
   authMiddleware(["admin"]),
   getReferralIncomeReport
 );
-router.get("/history/level-income-history", authMiddleware(["admin"]), getLevelIncomeHistory);
-router.get(
-  "/history/binary-income-history",
-  authMiddleware(["admin"]),
-  getBinaryIncomeReport
-);
-router.get(
-  "/history/leadership-share-history",
-  authMiddleware(["admin"]),
-  getLeadershipShareReport
-);
-router.get(
-  "/history/leadership-income-history",
-  authMiddleware(["admin"]),
-  getLeadershipIncomeReport
-);
-router.get(
-  "/history/bonanza-rewards",
-  authMiddleware(["admin"]),
-  getBonanzaRewardsReport
-);
 
-router.get("/history/swap-report", authMiddleware(["admin"]), getSwapReport);
-router.get("/history/reinvest-report", authMiddleware(["admin"]), getReinvestReport);
 router.get("/history/transfer-report", authMiddleware(["admin"]), getTransferReport);
 
 /////////////////
@@ -140,40 +100,7 @@ router.get("/kyc/history", authMiddleware(["admin"]), getAllKYC);
 // Admin User Update Route (Admin Only)
 router.put("/user/profile/update", authMiddleware(["admin"]), adminUpdateUserDetails);
 
-router.post(
-  "/bonanza-plan/create",
-  authMiddleware(["admin"]),
-  createBonanzaPlan
-);
-router.get("/bonanza-plans", authMiddleware(["admin"]), getAllBonanzaPlans);
-router.put(
-  "/bonanza-plan/update/:id",
-  authMiddleware(["admin"]),
-  updateBonanzaPlan
-);
-router.delete(
-  "/bonanza-plan/delete/:id",
-  authMiddleware(["admin"]),
-  deleteBonanzaPlan
-);
 
-router.post("/level-plan/create", authMiddleware(["admin"]), createLevelPlan);
-router.get("/level-plans", authMiddleware(["admin"]), getAllLevelPlans);
-router.put(
-  "/level-plan/update/:id",
-  authMiddleware(["admin"]),
-  updateLevelPlan
-);
-router.delete(
-  "/level-plan/delete/:id",
-  authMiddleware(["admin"]),
-  deleteLevelPlan
-);
-router.get(
-  "/level-income-rewards",
-  authMiddleware(["admin"]),
-  getAllLevelIncomeRewards
-);
 
 router.get("/staking-profits", authMiddleware(["admin"]), getStakingProfits);
 router.post(
@@ -182,11 +109,6 @@ router.post(
   approveWithdrawal
 );
 router.get("/user/withdrawals", authMiddleware(["admin"]), getWithdrawals);
-
-router.post("/stake/stake-manage", authMiddleware(["admin"]), adminManageStake);
-
-
-
 
 
 router.get(

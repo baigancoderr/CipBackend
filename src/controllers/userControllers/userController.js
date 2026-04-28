@@ -2,21 +2,14 @@ const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const User = require("../../models/User");
 const Admin = require("../../models/Admin");
-const Package = require("../../models/Package");
 const Deposit = require("../../models/Deposit");
 const Price = require("../../models/Price");
 const Withdrawal = require("../../models/Withdrawal");
-const Stake = require("../../models/Stake");
 const RoiDistribution = require("../../models/RoiDistribution");
 const Referral = require("../../models/Referral");
-const ReferralReward = require("../../models/Referral");
-const LevelReward = require("../../models/LevelIncome");
 const KYC = require("../../models/KYC");
-const Swap = require("../../models/Swap");
 const crypto = require("crypto");
 const { ethers, parseUnits } = require("ethers");
-const TransferTransaction = require("../../models/TransferTransaction");
-const ReinvestTransaction = require("../../models/ReinvestTransaction");
 const { sendEmail, sendSupportEmails } = require("../../services/emailService");
 const {
   verifyTransactionHash,
@@ -73,7 +66,7 @@ const calculateDownlineUsers = async (referralCode) => {
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive wallets"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncomeisActive wallets",
     );
 
     if (!user) {
@@ -91,22 +84,27 @@ const getDashboard = async (req, res) => {
 
     // ====================== LIVE SGN PRICE ======================
     const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
-    const sgnPrice = sgnPriceDoc?.price || 0.00;
+    const sgnPrice = sgnPriceDoc?.price || 0.0;
 
     // ====================== ROI TOKENS → USD CONVERSION ======================
     const roiTokens = user.wallets?.roi?.amount || 0;
     const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
 
-    const referralEarningsUsd = user.wallets?.referral?.amount || user.referralEarnings || 0;
+    const referralEarningsUsd =
+      user.wallets?.referral?.amount || user.referralEarnings || 0;
 
     // Total Earnings in USD (Correct Calculation)
-    const totalEarningsUsd = parseFloat((referralEarningsUsd + roiEarningsUsd).toFixed(2));
+    const totalEarningsUsd = parseFloat(
+      (referralEarningsUsd + roiEarningsUsd).toFixed(2),
+    );
 
     // ====================== RECENT 5 INVESTMENTS ======================
     const recentInvestments = await Investment.find({ userId: user.userId })
       .sort({ createdAt: -1 })
       .limit(5)
-      .select("amount tokensReceived totalReturnTokens dailyIncomeTokens status createdAt")
+      .select(
+        "amount tokensReceived totalReturnTokens dailyIncomeTokens status createdAt",
+      )
       .lean();
 
     // ====================== DIRECT REFERRALS ======================
@@ -131,9 +129,9 @@ const getDashboard = async (req, res) => {
 
       dashboard: {
         stats: [
-          { 
-            title: "LIVE PRICE (SGN)", 
-            value: `$${sgnPrice.toFixed(4)}` 
+          {
+            title: "LIVE PRICE (SGN)",
+            value: `$${sgnPrice.toFixed(4)}`,
           },
           {
             title: "TOTAL DEPOSIT",
@@ -145,7 +143,7 @@ const getDashboard = async (req, res) => {
           },
           {
             title: "TOTAL EARNINGS",
-            value: `$${totalEarningsUsd.toFixed(2)}`,           // ← Corrected
+            value: `$${totalEarningsUsd.toFixed(2)}`, // ← Corrected
           },
           {
             title: "REFERRAL EARNINGS",
@@ -153,7 +151,7 @@ const getDashboard = async (req, res) => {
           },
           {
             title: "ROI EARNINGS",
-            value: `$${roiEarningsUsd.toFixed(2)}`,             // ← Now in USD
+            value: `$${roiEarningsUsd.toFixed(2)}`, // ← Now in USD
           },
           {
             title: "ACTIVE PACKAGE",
@@ -167,9 +165,9 @@ const getDashboard = async (req, res) => {
 
         profitTracker: {
           totalInvested: user.totalInvested || 0,
-          totalEarnings: totalEarningsUsd,                     // ← Corrected
+          totalEarnings: totalEarningsUsd, // ← Corrected
           dailyIncome: user.dailyIncome || 0,
-          roiBalance: roiTokens,                          // ← USD value
+          roiBalance: roiTokens, // ← USD value
           referralBalance: referralEarningsUsd,
         },
 
@@ -198,67 +196,6 @@ const getDashboard = async (req, res) => {
       success: false,
       message: "Failed to fetch dashboard data",
     });
-  }
-};
-
-
-const getUserStakedPlans = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
-    // Fetch all stakes for the user
-    const stakes = await Stake.find({ userId: user._id })
-      .populate("package", "name investment lockingPeriodDays")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const stakedPlans = stakes
-      .filter((stake) => stake.package)
-      .map((stake) => {
-        const lockingPeriodEnd = moment(stake.packageEndDate);
-        const isLockingPeriodActive = moment().isBefore(lockingPeriodEnd);
-        return {
-          stakeId: stake.stakeId,
-          amount: stake.amount,
-          packageName: stake.package.name,
-          investment: stake.package.investment,
-          dailyROI: stake.dailyROI || 0,
-          dailyROIAmount: stake.dailyROIAmount || 0,
-          lockingPeriodDays: stake.package.lockingPeriodDays,
-          createdAt: stake.createdAt,
-          startDate: stake.packageStartDate,
-          lockUntil: lockingPeriodEnd.toDate(),
-          isLockingPeriodActive,
-          status: stake.status,
-          isSwapped: stake.isSwapped || false,
-          isReinvested: stake.isReinvested || false,
-          isTransferred: stake.isTransferredToPrincipalWallet || false,
-        };
-      });
-    res.status(200).json(
-      successResponse("Staked plans retrieved successfully", {
-        stakedPlans,
-        totalStakedAmount: stakedPlans.reduce(
-          (sum, plan) => sum + plan.amount,
-          0,
-        ),
-        totalStakes: stakedPlans.length,
-      }),
-    );
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-// Get All Package Details
-const getAllPackageDetails = async (req, res) => {
-  try {
-    const packages = await Package.find().sort({ investment: 1 }).lean();
-
-    res.status(200).json(successResponse("All packages retrieved", packages));
-  } catch (error) {
-    console.error("Error fetching all package details:", error);
-    res.status(500).json(errorResponse(error.message));
   }
 };
 
@@ -318,14 +255,18 @@ const requestWithdrawalOtp = async (req, res) => {
     if (!user) throw new Error("User not found");
 
     const walletMap = {
-      principal: "principalWallet",
-      my: "myWallet",
-      deposit: "depositWallet",
-      referral: "referralWallet",
+      deposit: "deposit",
+      referral: "referral",
+      roi: "roi",
     };
-    const walletObj = walletMap[walletType];
-    if (!walletObj) throw new Error("Invalid wallet type");
-    if (user[walletObj].amount < amount) {
+
+    const walletKey = walletMap[walletType];
+    if (!walletKey) throw new Error("Invalid wallet type");
+
+    // Safe check for nested wallet
+    const walletBalance = user.wallets?.[walletKey]?.amount || 0;
+
+    if (walletBalance < amount) {
       throw new Error(`Insufficient funds in ${walletType} Wallet`);
     }
 
@@ -336,8 +277,8 @@ const requestWithdrawalOtp = async (req, res) => {
       );
     }
 
-    const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
-      ? config.TRANSACTION_CHARGE || 10
+    const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 5
       : 0;
     const adminDeduction = Number(
       ((amount * TRANSACTION_CHARGE) / 100).toFixed(4),
@@ -389,457 +330,333 @@ const requestWithdrawalOtp = async (req, res) => {
   }
 };
 
-
-
-
-
-
-// const withdraw = async (req, res) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-
-//   let withdrawal = null;
-//   let adminDeduction = 0;
-
-//   try {
-//     const { walletType, amount, currencyType = "USDT", otp } = req.body;
-//     const userId = req.user.id;
-
-//     const user = await User.findById(userId).session(session);
-
-//     if (!user) {
-//       throw new Error("User not found");
-//     }
-
-//     // Validate OTP
-//     await verifyOTP(user.email, otp, "withdrawal");
-//     logger.info(`OTP verified for user ${userId} for withdrawal request.`);
-
-//     // Check if wallet address is not set or is "NA"
-//     if (!user.walletAddress || user.walletAddress === "NA") {
-//       throw new Error("Set wallet address first");
-//     }
-
-//     // Validate amount
-//     if (!amount || amount <= 0) {
-//       throw new Error("Invalid withdrawal amount");
-//     }
-
-//     // Minimum withdrawal amount (e.g., $1)
-//     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
-//     if (amount < MIN_WITHDRAWAL_AMOUNT) {
-//       throw new Error(
-//         `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
-//       );
-//     }
-
-//     // Wallet mapping
-//     const walletMap = {
-//       principal: "principalWallet",
-//       my: "myWallet",
-//       deposit: "depositWallet",
-//       referral: "referralWallet",
-//     };
-
-//     if (!walletMap[walletType]) {
-//       throw new Error("Invalid wallet type");
-//     }
-
-//     // Determine the wallet field and check balance
-//     const walletObj = walletMap[walletType];
-//     const wallet = user[walletObj];
-//     if (!wallet || wallet.amount < amount) {
-//       throw new Error(
-//         `Insufficient funds in ${
-//           walletType.charAt(0).toUpperCase() + walletType.slice(1)
-//         } Wallet`,
-//       );
-//     }
-
-//     // Apply transaction charge: 10% for my and referral wallets, 0% for others
-//     const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
-//       ? config.TRANSACTION_CHARGE || 10
-//       : 0;
-//     adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
-//     const netAmount = Number((amount - adminDeduction).toFixed(2));
-
-//     // Ensure netAmount is positive
-//     if (netAmount <= 0) {
-//       throw new Error(
-//         "Net withdrawal amount after charges must be greater than 0",
-//       );
-//     }
-
-//     // Deduct the full amount from the user's wallet
-//     user[walletObj].amount = Number((wallet.amount - amount).toFixed(2));
-
-//     // Update admin's transactionFeeCollected if a fee was applied
-//     if (adminDeduction > 0) {
-//       const adminCacheKey = `admin:admin123`;
-//       let admin;
-//       const cachedAdmin = await redisClient.get(adminCacheKey).catch((err) => {
-//         console.warn(`Redis get error for ${adminCacheKey}:`, err.message);
-//         return null;
-//       });
-
-//       if (cachedAdmin) {
-//         admin = JSON.parse(cachedAdmin);
-//       } else {
-//         admin = await Admin.findOne({ referralCode: "admin123" }).session(
-//           session,
-//         );
-//         if (admin) {
-//           await redisClient
-//             .set(adminCacheKey, JSON.stringify(admin), "EX", 3600)
-//             .catch((err) => {
-//               console.warn(
-//                 `Redis set error for ${adminCacheKey}:`,
-//                 err.message,
-//               );
-//             });
-//         }
-//       }
-
-//       if (admin) {
-//         admin.transactionFeeCollected = Number(
-//           ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2),
-//         );
-//         await Admin.updateOne(
-//           { referralCode: "admin123" },
-//           { transactionFeeCollected: admin.transactionFeeCollected },
-//           { session },
-//         );
-//       } else {
-//         console.warn("Admin not found for updating transactionFeeCollected");
-//       }
-//     }
-
-//     // Create a withdrawal request with pending status
-//     withdrawal = await Withdrawal.create(
-//       [
-//         {
-//           userId: user._id,
-//           amount,
-//           actualPayAmount: netAmount,
-//           withdrawalFee: adminDeduction,
-//           withdrawalFeePercentage: TRANSACTION_CHARGE,
-//           walletType,
-//           currencyType,
-//           status: "pending",
-//           walletAddress: user.walletAddress,
-//           requestedAmount: amount,
-//         },
-//       ],
-//       { session },
-//     );
-
-//     // Save user changes
-//     await User.updateOne(
-//       { _id: user._id },
-//       { [walletObj]: user[walletObj] },
-//       { session },
-//     );
-
-//     // Check if withdrawal amount is ≤ 500 USDT for automatic processing
-//     const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT;
-//     if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
-//       const encryptionKey = config.ENCRYPTION_KEY;
-//       if (!encryptionKey) {
-//         throw new Error("ENCRYPTION_KEY is not defined");
-//       }
-//       if (!config.ENCRYPTED_PRIVATE_KEY) {
-//         throw new Error("ENCRYPTED_PRIVATE_KEY is not defined");
-//       }
-//       privateKey = decryptPrivateKey(
-//         config.ENCRYPTED_PRIVATE_KEY,
-//         encryptionKey,
-//       );
-
-//       const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
-//       const walletSigner = new ethers.Wallet(privateKey, provider);
-//       const contract = new ethers.Contract(
-//         config.WITHDRAW_CONTRACT_ADDRESS,
-//         config.WITHDRAW_CONTRACT_ABI,
-//         walletSigner,
-//       );
-
-//       const usdtContract = new ethers.Contract(
-//         config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
-//         config.USDT_CONTRACT_ABI, // Replace with USDT ABI
-//         provider,
-//       );
-//       const contractBalance = await usdtContract.balanceOf(
-//         config.WITHDRAW_CONTRACT_ADDRESS,
-//       );
-
-//       const decimals = 18; // For USDT; adjust if needed
-//       const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
-
-//       if (!amountWei || isNaN(amountWei.toString())) {
-//         throw new Error("Invalid amount in Wei");
-//       }
-
-//       if (contractBalance.lt(amountWei)) {
-//         throw new Error(
-//           `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
-//             contractBalance,
-//             18,
-//           )} USDT available, ${netAmount} USDT required`,
-//         );
-//       }
-
-//       // Send transaction to contract's userWithdraw function
-//       const tx = await contract.userWithdraw(user.walletAddress, amountWei);
-//       const receipt = await tx.wait();
-//       // Update withdrawal status to completed
-//       await Withdrawal.updateOne(
-//         { _id: withdrawal[0]._id },
-//         { status: "completed", transactionHash: tx.hash },
-//         { session },
-//       );
-
-//       // Commit the database transaction after blockchain success
-//       await session.commitTransaction();
-
-//       // Update user cache after successful withdrawal
-//       user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
-
-//       res.status(200).json(
-//         successResponse("Withdrawal completed successfully", {
-//           withdrawalId: withdrawal[0]._id,
-//           requestedAmount: amount,
-//           netAmount,
-//           transactionCharge: adminDeduction,
-//           currencyType,
-//           walletType,
-//           status: "completed",
-//           walletAddress: user.walletAddress,
-//           txHash: tx.hash,
-//         }),
-//       );
-
-//       console.log(
-//         `Automatic withdrawal completed for user ${
-//           user._id
-//         }: requested $${amount.toFixed(4)}, ` +
-//           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-//             4,
-//           )} ` +
-//           `from ${walletType} wallet, txHash: ${tx.hash}`,
-//       );
-//     } else {
-//       // For amounts > 500 USDT, commit transaction and keep withdrawal pending
-//       await session.commitTransaction();
-
-//       // Update user cache after pending withdrawal
-//       user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
-
-//       res.status(200).json(
-//         successResponse(
-//           "Withdrawal request submitted and pending admin approval",
-//           {
-//             withdrawalId: withdrawal[0]._id,
-//             requestedAmount: amount,
-//             netAmount,
-//             transactionCharge: adminDeduction,
-//             currencyType,
-//             walletType,
-//             status: "pending",
-//             walletAddress: user.walletAddress,
-//           },
-//         ),
-//       );
-
-//       console.log(
-//         `Withdrawal request pending for user ${
-//           user._id
-//         }: requested $${amount.toFixed(4)}, ` +
-//           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-//             4,
-//           )} ` +
-//           `from ${walletType} wallet`,
-//       );
-//     }
-//   } catch (error) {
-//     // Abort transaction only if it hasn't been committed
-//     await session.abortTransaction();
-
-//     // Handle blockchain transaction errors and revert changes
-//     // if (
-//     //   error.code === "INSUFFICIENT_FUNDS" ||
-//     //   error.code === "NETWORK_ERROR" ||
-//     //   error.message.includes("transaction failed")
-//     // ) {
-//     //   // Revert user wallet balance
-//     //   const userUpdate = await User.findById(req.user.id);
-
-//     //   if (userUpdate && walletMap[req.body.walletType]) {
-//     //     const walletObj = walletMap[req.body.walletType];
-//     //     userUpdate[walletObj].amount = Number(
-//     //       (userUpdate[walletObj].amount + req.body.amount).toFixed(2)
-//     //     );
-//     //     await userUpdate.save();
-
-//     //     // Update user cache after reversion
-//     //     await redisClient.set(`user:${req.user.id}`, JSON.stringify(userUpdate), 'EX', 3600).catch((err) => {
-//     //       console.warn(`Redis set error for user:${req.user.id}:`, err.message);
-//     //     });
-//     //   }
-
-//     //   // Revert admin fee if deducted
-//     //   if (adminDeduction > 0) {
-//     //     const adminUpdate = await Admin.findOne({ referralCode: "admin123" });
-//     //     if (adminUpdate) {
-//     //       adminUpdate.transactionFeeCollected = Number(
-//     //         (adminUpdate.transactionFeeCollected - adminDeduction).toFixed(2)
-//     //       );
-//     //       await adminUpdate.save();
-
-//     //       // Update admin cache after reversion
-//     //       await redisClient.set(`admin:admin123`, JSON.stringify(adminUpdate), 'EX', 3600).catch((err) => {
-//     //         console.warn(`Redis set error for admin:admin123:`, err.message);
-//     //       });
-//     //     }
-//     //   }
-
-//     //   // Update withdrawal to failed
-//     //   if (withdrawal && withdrawal[0]) {
-//     //     await Withdrawal.updateOne(
-//     //       { _id: withdrawal[0]._id },
-//     //       { status: "failed", error: error.message }
-//     //     );
-//     //   }
-
-//     //   return res
-//     //     .status(500)
-//     //     .json(errorResponse("Withdrawal transaction failed; balance restored"));
-//     // }
-
-//     logger.error(
-//       `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
-//       error.message,
-//       error.stack,
-//     );
-//     res.status(500).json(errorResponse(error.message));
-//   } finally {
-//     session.endSession();
-//   }
-// };
-
-
-
 const withdraw = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  let withdrawal = null;
+  let adminDeduction = 0;
+
   try {
-    const { amount, walletType, walletAddress } = req.body;
+    const { walletType, amount, currencyType = "USDC", otp } = req.body;
     const userId = req.user.id;
-
-    // ✅ Validate amount
-    if (!amount || amount <= 0) {
-      throw new Error("Invalid amount");
-    }
-
-    // ✅ Minimum withdraw 
-    if (amount < 5) {
-      throw new Error("Minimum withdrawal amount is 5 USDC");
-    }
-
-    if (!walletAddress) {
-      throw new Error("Wallet address required");
-    }
-
-    if (!["referral", "roi"].includes(walletType)) {
-      throw new Error("Invalid wallet type");
-    }
 
     const user = await User.findById(userId).session(session);
 
-    if (!user) throw new Error("User not found");
-
-    //  Wallet match check
-    const inputAddress = walletAddress.trim().toLowerCase();
-    const savedAddress = user.walletAddress?.trim().toLowerCase();
-
-    if (!savedAddress) {
-      throw new Error("No wallet address saved");
+    if (!user) {
+      throw new Error("User not found");
     }
 
-    if (inputAddress !== savedAddress) {
-      throw new Error("Wallet address mismatch");
+    // Validate OTP
+    await verifyOTP(user.email, otp, "withdrawal");
+    logger.info(`OTP verified for user ${userId} for withdrawal request.`);
+
+    // Check if wallet address is not set or is "NA"
+    if (!user.walletAddress || user.walletAddress === "NA") {
+      throw new Error("Set wallet address first");
     }
 
-    const wallet = user.wallets[walletType];
-
-    if (!wallet || wallet.amount < amount) {
-      throw new Error("Insufficient balance");
+    // Validate amount
+    if (!amount || amount <= 0) {
+      throw new Error("Invalid withdrawal amount");
     }
 
-    //  Deduct balance instantly
-    user.wallets[walletType].amount = Number(
-      (wallet.amount - amount).toFixed(2)
-    );
+    // Minimum withdrawal amount (e.g., $1)
+    const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
+    if (amount < MIN_WITHDRAWAL_AMOUNT) {
+      throw new Error(
+        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
+      );
+    }
 
-    //  Generate Transaction Hash
-    const transactionHash = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const walletMap = {
+      deposit: "deposit",
+      referral: "referral",
+      roi: "roi",
+    };
 
-    //  Create withdrawal (always USDC)
-    const withdrawal = await Withdrawal.create(
+    const walletKey = walletMap[walletType];
+    if (!walletKey) throw new Error("Invalid wallet type");
+
+    // Safe access to nested wallet
+    user.wallets = user.wallets || {};
+    user.wallets[walletKey] = user.wallets[walletKey] || { amount: 0 };
+
+    const wallet = user.wallets[walletKey];
+    if (wallet.amount < amount) {
+      throw new Error(`Insufficient funds in ${walletType} Wallet`);
+    }
+
+ 
+    // Apply transaction charge: 10% for my and referral wallets, 0% for others
+    const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 5
+      : 0;
+    adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
+    const netAmount = Number((amount - adminDeduction).toFixed(2));
+
+    // Ensure netAmount is positive
+    if (netAmount <= 0) {
+      throw new Error(
+        "Net withdrawal amount after charges must be greater than 0",
+      );
+    }
+
+    // Deduct the full amount from the user's wallet
+    user[wallet].amount = Number((wallet.amount - amount).toFixed(2));
+
+    // Update admin's transactionFeeCollected if a fee was applied
+    if (adminDeduction > 0) {
+      const adminCacheKey = `admin:admin123`;
+      let admin;
+      const cachedAdmin = await redisClient.get(adminCacheKey).catch((err) => {
+        console.warn(`Redis get error for ${adminCacheKey}:`, err.message);
+        return null;
+      });
+
+      if (cachedAdmin) {
+        admin = JSON.parse(cachedAdmin);
+      } else {
+        admin = await Admin.findOne({ referralCode: "admin123" }).session(
+          session,
+        );
+        if (admin) {
+          await redisClient
+            .set(adminCacheKey, JSON.stringify(admin), "EX", 3600)
+            .catch((err) => {
+              console.warn(
+                `Redis set error for ${adminCacheKey}:`,
+                err.message,
+              );
+            });
+        }
+      }
+
+      if (admin) {
+        admin.transactionFeeCollected = Number(
+          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2),
+        );
+        await Admin.updateOne(
+          { referralCode: "admin123" },
+          { transactionFeeCollected: admin.transactionFeeCollected },
+          { session },
+        );
+      } else {
+        console.warn("Admin not found for updating transactionFeeCollected");
+      }
+    }
+
+    // Create a withdrawal request with pending status
+    withdrawal = await Withdrawal.create(
       [
         {
           userId: user._id,
           amount,
-          actualPayAmount: amount,
-          withdrawalFee: 0,
-          withdrawalFeePercentage: 0,
+          actualPayAmount: netAmount,
+          withdrawalFee: adminDeduction,
+          withdrawalFeePercentage: TRANSACTION_CHARGE,
           walletType,
-          currencyType: "USDC", 
+          currencyType,
           status: "pending",
-          walletAddress,
-          transactionHash,
+          walletAddress: user.walletAddress,
+          requestedAmount: amount,
         },
       ],
-      { session }
+      { session },
     );
 
-    await user.save({ session });
+    // Save user changes
+    await User.updateOne(
+      { _id: user._id },
+      { [walletObj]: user[walletObj] },
+      { session },
+    );
 
-    await session.commitTransaction();
+    // Check if withdrawal amount is ≤ 500 USDT for automatic processing
+    const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT;
+    if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
+      const encryptionKey = config.ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        throw new Error("ENCRYPTION_KEY is not defined");
+      }
+      if (!config.ENCRYPTED_PRIVATE_KEY) {
+        throw new Error("ENCRYPTED_PRIVATE_KEY is not defined");
+      }
+      privateKey = decryptPrivateKey(
+        config.ENCRYPTED_PRIVATE_KEY,
+        encryptionKey,
+      );
 
-    return res.status(200).json({
-      success: true,
-      message: "Withdrawal request submitted",
-      data: {
-        withdrawalId: withdrawal[0]._id,
-        transactionHash,
-        amount,
-        walletType,
-        currencyType: "USDC", //  return 
-        status: "pending",
-        createdAt: withdrawal[0].createdAt,
-        balances: {
-          referral: user.wallets.referral?.amount || 0,
-          roi: user.wallets.roi?.amount || 0,
-        },
-      },
-    });
+      const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
+      const walletSigner = new ethers.Wallet(privateKey, provider);
+      const contract = new ethers.Contract(
+        config.WITHDRAW_CONTRACT_ADDRESS,
+        config.WITHDRAW_CONTRACT_ABI,
+        walletSigner,
+      );
 
+      const usdtContract = new ethers.Contract(
+        config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
+        config.USDT_CONTRACT_ABI, // Replace with USDT ABI
+        provider,
+      );
+      const contractBalance = await usdtContract.balanceOf(
+        config.WITHDRAW_CONTRACT_ADDRESS,
+      );
+
+      const decimals = 18; // For USDT; adjust if needed
+      const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
+
+      if (!amountWei || isNaN(amountWei.toString())) {
+        throw new Error("Invalid amount in Wei");
+      }
+
+      if (contractBalance.lt(amountWei)) {
+        throw new Error(
+          `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
+            contractBalance,
+            18,
+          )} USDT available, ${netAmount} USDT required`,
+        );
+      }
+
+      // Send transaction to contract's userWithdraw function
+      const tx = await contract.userWithdraw(user.walletAddress, amountWei);
+      const receipt = await tx.wait();
+      // Update withdrawal status to completed
+      await Withdrawal.updateOne(
+        { _id: withdrawal[0]._id },
+        { status: "completed", transactionHash: tx.hash },
+        { session },
+      );
+
+      // Commit the database transaction after blockchain success
+      await session.commitTransaction();
+
+      // Update user cache after successful withdrawal
+      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
+
+      res.status(200).json(
+        successResponse("Withdrawal completed successfully", {
+          withdrawalId: withdrawal[0]._id,
+          requestedAmount: amount,
+          netAmount,
+          transactionCharge: adminDeduction,
+          currencyType,
+          walletType,
+          status: "completed",
+          walletAddress: user.walletAddress,
+          txHash: tx.hash,
+        }),
+      );
+
+      console.log(
+        `Automatic withdrawal completed for user ${
+          user._id
+        }: requested $${amount.toFixed(4)}, ` +
+          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
+            4,
+          )} ` +
+          `from ${walletType} wallet, txHash: ${tx.hash}`,
+      );
+    } else {
+      // For amounts > 500 USDT, commit transaction and keep withdrawal pending
+      await session.commitTransaction();
+
+      // Update user cache after pending withdrawal
+      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
+
+      res.status(200).json(
+        successResponse(
+          "Withdrawal request submitted and pending admin approval",
+          {
+            withdrawalId: withdrawal[0]._id,
+            requestedAmount: amount,
+            netAmount,
+            transactionCharge: adminDeduction,
+            currencyType,
+            walletType,
+            status: "pending",
+            walletAddress: user.walletAddress,
+          },
+        ),
+      );
+
+      console.log(
+        `Withdrawal request pending for user ${
+          user._id
+        }: requested $${amount.toFixed(4)}, ` +
+          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
+            4,
+          )} ` +
+          `from ${walletType} wallet`,
+      );
+    }
   } catch (error) {
+    // Abort transaction only if it hasn't been committed
     await session.abortTransaction();
 
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    // Handle blockchain transaction errors and revert changes
+    // if (
+    //   error.code === "INSUFFICIENT_FUNDS" ||
+    //   error.code === "NETWORK_ERROR" ||
+    //   error.message.includes("transaction failed")
+    // ) {
+    //   // Revert user wallet balance
+    //   const userUpdate = await User.findById(req.user.id);
+
+    //   if (userUpdate && walletMap[req.body.walletType]) {
+    //     const walletObj = walletMap[req.body.walletType];
+    //     userUpdate[walletObj].amount = Number(
+    //       (userUpdate[walletObj].amount + req.body.amount).toFixed(2)
+    //     );
+    //     await userUpdate.save();
+
+    //     // Update user cache after reversion
+    //     await redisClient.set(`user:${req.user.id}`, JSON.stringify(userUpdate), 'EX', 3600).catch((err) => {
+    //       console.warn(`Redis set error for user:${req.user.id}:`, err.message);
+    //     });
+    //   }
+
+    //   // Revert admin fee if deducted
+    //   if (adminDeduction > 0) {
+    //     const adminUpdate = await Admin.findOne({ referralCode: "admin123" });
+    //     if (adminUpdate) {
+    //       adminUpdate.transactionFeeCollected = Number(
+    //         (adminUpdate.transactionFeeCollected - adminDeduction).toFixed(2)
+    //       );
+    //       await adminUpdate.save();
+
+    //       // Update admin cache after reversion
+    //       await redisClient.set(`admin:admin123`, JSON.stringify(adminUpdate), 'EX', 3600).catch((err) => {
+    //         console.warn(`Redis set error for admin:admin123:`, err.message);
+    //       });
+    //     }
+    //   }
+
+    //   // Update withdrawal to failed
+    //   if (withdrawal && withdrawal[0]) {
+    //     await Withdrawal.updateOne(
+    //       { _id: withdrawal[0]._id },
+    //       { status: "failed", error: error.message }
+    //     );
+    //   }
+
+    //   return res
+    //     .status(500)
+    //     .json(errorResponse("Withdrawal transaction failed; balance restored"));
+    // }
+
+    logger.error(
+      `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
+      error.message,
+      error.stack,
+    );
+    res.status(500).json(errorResponse(error.message));
   } finally {
     session.endSession();
   }
 };
-
-
-
-
 
 // Get withdrawal history for all users (admin only)
 const getWithdrawalHistory = async (req, res) => {
@@ -885,18 +702,6 @@ const getReport = async (req, res) => {
           createdAt: -1,
         });
         break;
-      case "swap":
-        transactions = await Swap.find({ userId: user._id }).sort({
-          createdAt: -1,
-        });
-        break;
-      case "referral":
-        transactions = await ReferralReward.find({ referrerId: user._id }).sort(
-          {
-            createdAt: -1,
-          },
-        );
-        break;
       case "bonanza":
         transactions = [];
         break;
@@ -933,111 +738,6 @@ const getWalletDetails = async (req, res) => {
     );
   } catch (error) {
     res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const getInvestments = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate("package");
-    if (!user) return res.status(404).json(errorResponse("User not found"));
-
-    const teamInvestment = await calculateDownlineInvestment(user.referralCode);
-
-    const investments = user.package ? [user.package] : [];
-    res.status(200).json(
-      successResponse("Investments retrieved", {
-        selfInvestment: user.totalSelfInvestment, // Use totalSelfInvestment
-        teamInvestment, // Use updated downline investment
-        investments,
-      }),
-    );
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const swapDepositToToken = async (req, res) => {
-  try {
-    const { amount } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json(errorResponse("Invalid amount"));
-    }
-
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json(errorResponse("User not found"));
-    }
-
-    // Check sufficient balance in depositWallet
-    if (user.depositWallet.amount < amount) {
-      return res
-        .status(400)
-        .json(errorResponse("Insufficient balance in deposit wallet"));
-    }
-
-    // Deduct from depositWallet
-    user.depositWallet.amount -= amount;
-
-    // Convert to token (assuming 1:1 conversion rate for simplicity; adjust if needed)
-    const tokenPrice = await Price.findOne({ currencyType: "URWA" });
-    if (!tokenPrice) {
-      return res.status(500).json(errorResponse("Token price not available"));
-    }
-
-    const swapFeePercentage = 0.02;
-    const swapFee = amount * swapFeePercentage;
-    const netUsdtAmount = amount - swapFee;
-    const tokenAmount = netUsdtAmount / tokenPrice.price; // Or apply conversion: amount * conversionRate
-
-    // Add to emgtWallet (assuming it's the token wallet)
-    user.emgtWallet.amount += tokenAmount;
-
-    await user.save();
-
-    const swap = new Swap({
-      userId: user._id,
-      user_id: user.user_id,
-      usdtAmount: amount,
-      emgtAmount: tokenAmount,
-      tokenPrice: tokenPrice.price,
-      swapFee: swapFee,
-      walletType: "deposit",
-      status: "completed",
-      swapDetails: { originalAmount: amount, fee: swapFee, tokenAmount },
-    });
-    await swap.save();
-
-    res.status(200).json(
-      successResponse("Deposit swapped to token successfully", {
-        swappedAmount: amount,
-        tokenAmount,
-        newDepositBalance: user.depositWallet.amount,
-        newEmgtBalance: user.emgtWallet.amount,
-      }),
-    );
-  } catch (error) {
-    console.error("Error in swapDepositToToken:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const getSwaps = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    // Fetch swaps with population and sorting
-    const swaps = await Swap.find({ userId: user._id })
-      .populate("userId", "email") // Populate user email for reference
-      .sort({ createdAt: -1 }) // Sort by creation date, newest first
-      .lean();
-
-    res
-      .status(200)
-      .json(successResponse("Swaps retrieved successfully", swaps));
-  } catch (error) {
-    console.error("Error fetching swaps:", error);
-    res
-      .status(500)
-      .json(errorResponse("An error occurred while fetching swaps"));
   }
 };
 
@@ -1080,7 +780,6 @@ const getReferralData = async (req, res) => {
         lastName: user.last_name,
         email: user.email,
         level: lvl, // ✅ Level is now correctly set
-        plan: user.package?.name,
         joinDate: user.createdAt,
         selfInvestment: user.totalSelfInvestment || 0,
         leftTeamInvestment: user.leftLegInvestment || 0,
@@ -1275,14 +974,13 @@ const getReferralData = async (req, res) => {
 //   }
 // };
 
-
 const getTeamTreeView = async (req, res) => {
   try {
-    const { userId,  search = "" } = req.query;
+    const { userId, search = "" } = req.query;
 
     // 🔍 Logged-in user
     const authUser = await User.findById(req.user.id).select(
-      "userId referralCode totalInvested"
+      "userId referralCode totalInvested",
     );
 
     if (!authUser) {
@@ -1308,20 +1006,18 @@ const getTeamTreeView = async (req, res) => {
     const buildTree = async (parentUserId, level = 1) => {
       const children = await User.find({ referredBy: parentUserId })
         .lean()
-        .select(
-          "userId username name email totalInvested referralCode"
-        );
+        .select("userId username name email totalInvested referralCode");
 
       if (!children.length) return [];
 
       const result = await Promise.all(
         children.map(async (child) => {
-        const subChildren = await buildTree(child.referralCode, level + 1);
+          const subChildren = await buildTree(child.referralCode, level + 1);
 
           // 🔥 Calculate team investment
           const teamInvestment = subChildren.reduce(
             (sum, c) => sum + (c.selfInvestment + c.teamInvestment),
-            0
+            0,
           );
 
           return {
@@ -1336,7 +1032,7 @@ const getTeamTreeView = async (req, res) => {
             level,
             children: subChildren,
           };
-        })
+        }),
       );
 
       return result;
@@ -1376,9 +1072,8 @@ const getTeamTreeView = async (req, res) => {
 
     // 🔥 Calculate total team investment
     const totalTeamInvestment = treeChildren.reduce(
-      (sum, node) =>
-        sum + node.selfInvestment + node.teamInvestment,
-      0
+      (sum, node) => sum + node.selfInvestment + node.teamInvestment,
+      0,
     );
 
     return res.status(200).json({
@@ -1411,10 +1106,6 @@ const getTeamTreeView = async (req, res) => {
     });
   }
 };
-
-
-
-
 
 const getLevelWiseIncome = async (req, res) => {
   try {
@@ -1507,7 +1198,7 @@ const getDirectTeam = async (req, res) => {
 
     // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalInvested"
+      "referralCode totalInvested",
     );
 
     if (!user) {
@@ -1571,14 +1262,13 @@ const getDirectTeam = async (req, res) => {
   }
 };
 
-
 const getIndirectTeam = async (req, res) => {
   try {
     const { page = 1, limit = 10, level } = req.query;
 
     // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalInvested"
+      "referralCode totalInvested",
     );
 
     if (!user) {
@@ -1638,20 +1328,18 @@ const getIndirectTeam = async (req, res) => {
     };
 
     let allIndirectUsers = await getDownline(
-      directReferrals.map((u) => u.referralCode)
+      directReferrals.map((u) => u.referralCode),
     );
 
     // 🎯 Filter by level (optional)
     if (level) {
       const lvl = parseInt(level);
-      allIndirectUsers = allIndirectUsers.filter(
-        (u) => u.level === lvl
-      );
+      allIndirectUsers = allIndirectUsers.filter((u) => u.level === lvl);
     }
 
     // 📊 Sort latest first
     allIndirectUsers.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
     const total = allIndirectUsers.length;
@@ -1736,9 +1424,9 @@ const getDailyROI = async (req, res) => {
     const formattedData = distributions.map((dist, index) => ({
       sr: (page - 1) * limit + index + 1,
       investmentId: dist.investmentId,
-      amount: dist.amount,                    // daily ROI tokens
-      totalTokens: dist.totalTokens,          // total tokens from this investment
-      dailyROI: dist.dailyROI,                // daily ROI percentage
+      amount: dist.amount, // daily ROI tokens
+      totalTokens: dist.totalTokens, // total tokens from this investment
+      dailyROI: dist.dailyROI, // daily ROI percentage
       stakeAmount: dist.stakeAmount,
       distributionDate: dist.distributionDate,
     }));
@@ -1757,7 +1445,7 @@ const getDailyROI = async (req, res) => {
           limit: parseInt(limit),
           totalPages: Math.ceil(total / limit),
         },
-      })
+      }),
     );
   } catch (error) {
     console.error("Error fetching daily ROI:", error);
@@ -1798,22 +1486,25 @@ const getReferralIncome = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     // Fetch data
-    const referrals = await Referral.find(query)          // ← Changed to Referral
+    const referrals = await Referral.find(query) // ← Changed to Referral
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
       .lean();
 
     // Total income
-    const totalReferralIncome = await Referral.aggregate([   // ← Changed to Referral
+    const totalReferralIncome = await Referral.aggregate([
+      // ← Changed to Referral
       { $match: query },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]).then((res) => res[0]?.total || 0);
 
     // Total records
-    const totalRecords = await Referral.countDocuments(query);  // ← Changed to Referral
+    const totalRecords = await Referral.countDocuments(query); // ← Changed to Referral
 
-    console.log(`📊 Found ${totalRecords} referral records for user ${user.userId}`);
+    console.log(
+      `📊 Found ${totalRecords} referral records for user ${user.userId}`,
+    );
 
     const formattedReferrals = referrals.map((ref, index) => ({
       sr: skip + index + 1,
@@ -1829,7 +1520,9 @@ const getReferralIncome = async (req, res) => {
     res.status(200).json(
       successResponse("Referral income retrieved successfully", {
         selfInvestment: user.totalSelfInvestment || 0,
-        teamInvestment: await calculateDownlineInvestment(user.referralCode).catch(() => 0),
+        teamInvestment: await calculateDownlineInvestment(
+          user.referralCode,
+        ).catch(() => 0),
         referralCount: totalRecords,
         totalReferralIncome: parseFloat(totalReferralIncome.toFixed(2)),
         referrals: formattedReferrals,
@@ -1839,46 +1532,10 @@ const getReferralIncome = async (req, res) => {
           limit: Number(limit),
           totalPages: Math.ceil(totalRecords / Number(limit)),
         },
-      })
-    );
-  } catch (error) {
-    console.error("❌ Error fetching referral income:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-
-
-const getTransactionHistory = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
-
-    const deposits = await Deposit.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const withdrawals = await Withdrawal.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const swaps = await Swap.find({ userId: user._id }).sort({ createdAt: -1 });
-    const stakes = await Stake.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const transactions = [
-      ...deposits,
-      ...withdrawals,
-      ...swaps,
-      ...stakes,
-    ].sort((a, b) => b.createdAt - a.createdAt);
-
-    res.status(200).json(
-      successResponse("Transaction history retrieved", {
-        selfInvestment: user.totalSelfInvestment, // Use totalSelfInvestment
-        teamInvestment: await calculateDownlineInvestment(user.referralCode), // Use updated downline investment
-        transactions,
       }),
     );
   } catch (error) {
+    console.error("❌ Error fetching referral income:", error);
     res.status(500).json(errorResponse(error.message));
   }
 };
@@ -1893,7 +1550,6 @@ const getUserProfile = async (req, res) => {
       success: true,
       user,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -1901,8 +1557,6 @@ const getUserProfile = async (req, res) => {
     });
   }
 };
-
-
 
 const CreateInvestment = async (req, res) => {
   try {
@@ -1962,7 +1616,6 @@ const CreateInvestment = async (req, res) => {
       message: "Investment successful",
       investment,
     });
-
   } catch (error) {
     console.error("Investment Error:", error);
     res.status(500).json({
@@ -1971,13 +1624,6 @@ const CreateInvestment = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-
 
 const updateUserProfilePassword = async (req, res) => {
   try {
@@ -2039,8 +1685,6 @@ const updateUserProfilePassword = async (req, res) => {
     res.status(500).json(errorResponse(error.message));
   }
 };
-
-
 
 const sendSupportEmail = async (req, res) => {
   try {
@@ -2254,47 +1898,38 @@ const logout = async (req, res) => {
   }
 };
 
-
-
-
-
 // Gouri Code
-
-
-
 
 const NETWORK_CONFIG = {
   WEB20_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/erc20/usdt/create/"
+    url: "https://api.cryptapi.io/erc20/usdt/create/",
   },
 
   BASE_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/base/usdt/create/"
+    url: "https://api.cryptapi.io/base/usdt/create/",
   },
 
   BASE_USDC: {
     coin: "USDC",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/base/usdc/create/"
+    url: "https://api.cryptapi.io/base/usdc/create/",
   },
 
   POLYGON_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/polygon/usdt/create/"
+    url: "https://api.cryptapi.io/polygon/usdt/create/",
   },
   BEP20_USDT: {
     coin: "USDT",
-    wallet: process.env.EVM_WALLET,       
-    url: "https://api.cryptapi.io/bep20/usdt/create/"
-  }
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/bep20/usdt/create/",
+  },
 };
-
-
 
 const createDeposit = async (req, res) => {
   try {
@@ -2302,21 +1937,29 @@ const createDeposit = async (req, res) => {
 
     // 🔐 Validation
     if (!userId) {
-      return res.status(400).json({ success: false, message: "userId required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "userId required" });
     }
 
     if (!amount || Number(amount) <= 0) {
-      return res.status(400).json({ success: false, message: "Valid amount required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid amount required" });
     }
 
     const user = await User.findOne({ userId });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const config = NETWORK_CONFIG[network];
     if (!config || !config.wallet) {
-      return res.status(400).json({ success: false, message: "Invalid network" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid network" });
     }
 
     console.log(`🚀 Creating deposit for ${userId}`);
@@ -2327,7 +1970,7 @@ const createDeposit = async (req, res) => {
       amount: Number(amount),
       coin: config.coin,
       network,
-      status: "initiated"
+      status: "initiated",
     });
 
     // 🔔 Callback URL (IMPORTANT)
@@ -2340,8 +1983,8 @@ const createDeposit = async (req, res) => {
         callback: callbackUrl,
         order_id: deposit._id.toString(),
         multi_token: 1,
-        json: 1
-      }
+        json: 1,
+      },
     });
 
     const data = response.data;
@@ -2352,7 +1995,7 @@ const createDeposit = async (req, res) => {
       await Deposit.findByIdAndDelete(deposit._id);
       return res.status(400).json({
         success: false,
-        message: data?.message || "CryptAPI error"
+        message: data?.message || "CryptAPI error",
       });
     }
 
@@ -2366,7 +2009,7 @@ const createDeposit = async (req, res) => {
 
     console.log("✅ Deposit Created:", {
       depositId: deposit._id,
-      uuid: deposit.uuid
+      uuid: deposit.uuid,
     });
 
     return res.json({
@@ -2376,19 +2019,17 @@ const createDeposit = async (req, res) => {
         address: data.address_in,
         coin: config.coin,
         network,
-        amount: Number(amount)
-      }
+        amount: Number(amount),
+      },
     });
-
   } catch (err) {
     console.error("❌ Deposit Error:", err.message);
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
-
 
 // ?callBack
 
@@ -2398,7 +2039,7 @@ const depositCallback = async (req, res) => {
 
     const data = {
       ...req.query,
-      ...req.body
+      ...req.body,
     };
 
     console.log("📦 FULL DATA:", data);
@@ -2411,7 +2052,7 @@ const depositCallback = async (req, res) => {
       txid,
       txid_in,
       confirmations,
-      secret
+      secret,
     } = data;
 
     const finalTxid = txid_in || txid;
@@ -2444,7 +2085,7 @@ const depositCallback = async (req, res) => {
 
     console.log("✅ MATCHED DEPOSIT:", {
       uuid: deposit.uuid,
-      order_id: deposit._id
+      order_id: deposit._id,
     });
 
     // ✅ Already completed
@@ -2469,7 +2110,7 @@ const depositCallback = async (req, res) => {
 
     // 🔁 Duplicate TX check
     const existingTx = await Deposit.findOne({
-      transactionHash: finalTxid
+      transactionHash: finalTxid,
     });
 
     if (existingTx) {
@@ -2480,7 +2121,7 @@ const depositCallback = async (req, res) => {
     const lockedDeposit = await Deposit.findOneAndUpdate(
       { _id: deposit._id, status: { $ne: "completed" } },
       { status: "processing" },
-      { new: true }
+      { new: true },
     );
 
     if (!lockedDeposit) {
@@ -2514,18 +2155,15 @@ const depositCallback = async (req, res) => {
     console.log("✅ Deposit SUCCESS:", {
       userId: user._id,
       credited: finalAmount,
-      txid: finalTxid
+      txid: finalTxid,
     });
 
     return res.send("OK");
-
   } catch (error) {
     console.error("❌ Callback Error:", error.message);
     return res.send("Error handled");
   }
 };
-
-
 
 const getDeposits = async (req, res) => {
   try {
@@ -2539,7 +2177,7 @@ const getDeposits = async (req, res) => {
 
     // 🔍 Build filter
     const filter = {
-      userId: userId
+      userId: userId,
     };
 
     // 📅 Date filter (optional)
@@ -2571,32 +2209,26 @@ const getDeposits = async (req, res) => {
         total,
         page,
         pages: Math.ceil(total / limit),
-        limit
+        limit,
       },
-      deposits
+      deposits,
     });
-
   } catch (error) {
     console.error("❌ Get Deposits Error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
-
-
-
-
-
 
 const logCallback = async ({
   req,
   data,
   status = "pending",
   message = "",
-  network = ""
+  network = "",
 }) => {
   try {
     await DepositCallbackLog.create({
@@ -2622,14 +2254,12 @@ const logCallback = async ({
       // 🔥 Extra Debug Info
       ip: req?.ip,
       method: req?.method,
-      headers: req?.headers
+      headers: req?.headers,
     });
-
   } catch (err) {
     console.error("❌ Log save failed:", err.message);
   }
 };
-
 
 // Update Walter if already Connected
 const updateWallet = async (req, res) => {
@@ -2650,7 +2280,7 @@ const updateWallet = async (req, res) => {
     const user = await User.findOneAndUpdate(
       { _id: userId, isActive: true },
       { walletAddress },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
@@ -2665,7 +2295,6 @@ const updateWallet = async (req, res) => {
       message: "Wallet updated successfully",
       user,
     });
-
   } catch (error) {
     console.error("Wallet update error:", error);
     res.status(500).json({
@@ -2674,7 +2303,6 @@ const updateWallet = async (req, res) => {
     });
   }
 };
-
 
 // ADD Wallet If user is coming First Time
 const addWalletFirstTime = async (req, res) => {
@@ -2716,7 +2344,6 @@ const addWalletFirstTime = async (req, res) => {
       message: "Wallet added successfully",
       user,
     });
-
   } catch (error) {
     console.error("Add wallet error:", error);
     res.status(500).json({
@@ -2727,101 +2354,6 @@ const addWalletFirstTime = async (req, res) => {
 };
 
 
-const updateEmail = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const userId = req.user.id || req.user._id;
-
-    if (!email) {
-      return res.status(400).json({ success: false, message: "Email required" });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "Invalid email format" });
-    }
-
-    // ✅ Check if email already used by another user
-    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "This email is already exists",
-      });
-    }
-
-    const user = await User.findOneAndUpdate(
-      { _id: userId, isActive: true },
-      { email },
-      { new: true }
-    );
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found or inactive" });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Email updated successfully",
-      user,
-    });
-
-  } catch (error) {
-    console.error("Email update error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-const addEmailFirstTime = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const userId = req.user.id || req.user._id;
-
-    if (!email) {
-      return res.status(400).json({ success: false, message: "Email required" });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "Invalid email format" });
-    }
-
-    // ✅ Check if email already used by any user
-    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "This email is already exists",
-      });
-    }
-
-    const user = await User.findOne({ _id: userId, isActive: true });
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    if (user.email && user.email !== "") {
-      return res.status(400).json({
-        success: false,
-        message: "Email already added, use update instead",
-      });
-    }
-
-    user.email = email;
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Email added successfully",
-      user,
-    });
-
-  } catch (error) {
-    console.error("Add email error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
 
 
 
@@ -2834,19 +2366,13 @@ const addEmailFirstTime = async (req, res) => {
 
 
 module.exports = {
-  getUserStakedPlans,
-  getAllPackageDetails,
   requestWithdrawalOtp,
   withdraw,
   getWithdrawalHistory,
   getDashboard,
   getWalletDetails,
-  getInvestments,
-  swapDepositToToken,
-  getSwaps,
   getDailyROI,
   getReferralIncome,
-  getTransactionHistory,
   getUserProfile,
   updateUserProfilePassword,
   getReport,
@@ -2859,7 +2385,6 @@ module.exports = {
   getDirectTeam,
   getIndirectTeam,
 
-
   sendSupportEmail,
   contactFormEmail,
   logout,
@@ -2869,8 +2394,6 @@ module.exports = {
   updateWallet,
   addWalletFirstTime,
   getDeposits,
-  updateEmail,
-  addEmailFirstTime
   
 
 };
