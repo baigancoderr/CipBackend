@@ -66,7 +66,7 @@ const calculateDownlineUsers = async (referralCode) => {
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncomeisActive wallets"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncomeisActive wallets",
     );
 
     if (!user) {
@@ -84,22 +84,27 @@ const getDashboard = async (req, res) => {
 
     // ====================== LIVE SGN PRICE ======================
     const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
-    const sgnPrice = sgnPriceDoc?.price || 0.00;
+    const sgnPrice = sgnPriceDoc?.price || 0.0;
 
     // ====================== ROI TOKENS → USD CONVERSION ======================
     const roiTokens = user.wallets?.roi?.amount || 0;
     const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
 
-    const referralEarningsUsd = user.wallets?.referral?.amount || user.referralEarnings || 0;
+    const referralEarningsUsd =
+      user.wallets?.referral?.amount || user.referralEarnings || 0;
 
     // Total Earnings in USD (Correct Calculation)
-    const totalEarningsUsd = parseFloat((referralEarningsUsd + roiEarningsUsd).toFixed(2));
+    const totalEarningsUsd = parseFloat(
+      (referralEarningsUsd + roiEarningsUsd).toFixed(2),
+    );
 
     // ====================== RECENT 5 INVESTMENTS ======================
     const recentInvestments = await Investment.find({ userId: user.userId })
       .sort({ createdAt: -1 })
       .limit(5)
-      .select("amount tokensReceived totalReturnTokens dailyIncomeTokens status createdAt")
+      .select(
+        "amount tokensReceived totalReturnTokens dailyIncomeTokens status createdAt",
+      )
       .lean();
 
     // ====================== DIRECT REFERRALS ======================
@@ -124,9 +129,9 @@ const getDashboard = async (req, res) => {
 
       dashboard: {
         stats: [
-          { 
-            title: "LIVE PRICE (SGN)", 
-            value: `$${sgnPrice.toFixed(4)}` 
+          {
+            title: "LIVE PRICE (SGN)",
+            value: `$${sgnPrice.toFixed(4)}`,
           },
           {
             title: "TOTAL DEPOSIT",
@@ -138,7 +143,7 @@ const getDashboard = async (req, res) => {
           },
           {
             title: "TOTAL EARNINGS",
-            value: `$${totalEarningsUsd.toFixed(2)}`,           // ← Corrected
+            value: `$${totalEarningsUsd.toFixed(2)}`, // ← Corrected
           },
           {
             title: "REFERRAL EARNINGS",
@@ -146,7 +151,7 @@ const getDashboard = async (req, res) => {
           },
           {
             title: "ROI EARNINGS",
-            value: `$${roiEarningsUsd.toFixed(2)}`,             // ← Now in USD
+            value: `$${roiEarningsUsd.toFixed(2)}`, // ← Now in USD
           },
           {
             title: "ACTIVE PACKAGE",
@@ -160,9 +165,9 @@ const getDashboard = async (req, res) => {
 
         profitTracker: {
           totalInvested: user.totalInvested || 0,
-          totalEarnings: totalEarningsUsd,                     // ← Corrected
+          totalEarnings: totalEarningsUsd, // ← Corrected
           dailyIncome: user.dailyIncome || 0,
-          roiBalance: roiTokens,                          // ← USD value
+          roiBalance: roiTokens, // ← USD value
           referralBalance: referralEarningsUsd,
         },
 
@@ -193,7 +198,6 @@ const getDashboard = async (req, res) => {
     });
   }
 };
-
 
 const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
   try {
@@ -241,7 +245,6 @@ const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
   }
 };
 
-
 const requestWithdrawalOtp = async (req, res) => {
   const { walletType, amount, currencyType } = req.body;
 
@@ -252,29 +255,33 @@ const requestWithdrawalOtp = async (req, res) => {
     if (!user) throw new Error("User not found");
 
     const walletMap = {
-      principal: "principalWallet",
-      my: "myWallet",
-      deposit: "depositWallet",
-      referral: "referralWallet",
+      deposit: "deposit",
+      referral: "referral",
+      roi: "roi",
     };
-    const walletObj = walletMap[walletType];
-    if (!walletObj) throw new Error("Invalid wallet type");
-    if (user[walletObj].amount < amount) {
+
+    const walletKey = walletMap[walletType];
+    if (!walletKey) throw new Error("Invalid wallet type");
+
+    // Safe check for nested wallet
+    const walletBalance = user.wallets?.[walletKey]?.amount || 0;
+
+    if (walletBalance < amount) {
       throw new Error(`Insufficient funds in ${walletType} Wallet`);
     }
 
     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT || 1;
     if (amount < MIN_WITHDRAWAL_AMOUNT) {
       throw new Error(
-        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`
+        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
       );
     }
 
-    const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
-      ? config.TRANSACTION_CHARGE || 10
+    const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 5
       : 0;
     const adminDeduction = Number(
-      ((amount * TRANSACTION_CHARGE) / 100).toFixed(4)
+      ((amount * TRANSACTION_CHARGE) / 100).toFixed(4),
     );
     const netAmount = Number((amount - adminDeduction).toFixed(2));
     if (netAmount <= 0)
@@ -298,7 +305,7 @@ const requestWithdrawalOtp = async (req, res) => {
         walletAddress,
         otp,
       }),
-      { EX: 600 } // 10-minute TTL
+      { EX: 600 }, // 10-minute TTL
     );
 
     const email = user.email;
@@ -331,7 +338,7 @@ const withdraw = async (req, res) => {
   let adminDeduction = 0;
 
   try {
-    const { walletType, amount, currencyType = "USDT", otp } = req.body;
+    const { walletType, amount, currencyType = "USDC", otp } = req.body;
     const userId = req.user.id;
 
     const user = await User.findById(userId).session(session);
@@ -358,36 +365,32 @@ const withdraw = async (req, res) => {
     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
     if (amount < MIN_WITHDRAWAL_AMOUNT) {
       throw new Error(
-        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`
+        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
       );
     }
 
-    // Wallet mapping
     const walletMap = {
-      principal: "principalWallet",
-      my: "myWallet",
-      deposit: "depositWallet",
-      referral: "referralWallet",
+      deposit: "deposit",
+      referral: "referral",
+      roi: "roi",
     };
 
-    if (!walletMap[walletType]) {
-      throw new Error("Invalid wallet type");
+    const walletKey = walletMap[walletType];
+    if (!walletKey) throw new Error("Invalid wallet type");
+
+    // Safe access to nested wallet
+    user.wallets = user.wallets || {};
+    user.wallets[walletKey] = user.wallets[walletKey] || { amount: 0 };
+
+    const wallet = user.wallets[walletKey];
+    if (wallet.amount < amount) {
+      throw new Error(`Insufficient funds in ${walletType} Wallet`);
     }
 
-    // Determine the wallet field and check balance
-    const walletObj = walletMap[walletType];
-    const wallet = user[walletObj];
-    if (!wallet || wallet.amount < amount) {
-      throw new Error(
-        `Insufficient funds in ${
-          walletType.charAt(0).toUpperCase() + walletType.slice(1)
-        } Wallet`
-      );
-    }
-
+ 
     // Apply transaction charge: 10% for my and referral wallets, 0% for others
-    const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
-      ? config.TRANSACTION_CHARGE || 10
+    const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 5
       : 0;
     adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
     const netAmount = Number((amount - adminDeduction).toFixed(2));
@@ -395,12 +398,12 @@ const withdraw = async (req, res) => {
     // Ensure netAmount is positive
     if (netAmount <= 0) {
       throw new Error(
-        "Net withdrawal amount after charges must be greater than 0"
+        "Net withdrawal amount after charges must be greater than 0",
       );
     }
 
     // Deduct the full amount from the user's wallet
-    user[walletObj].amount = Number((wallet.amount - amount).toFixed(2));
+    user[wallet].amount = Number((wallet.amount - amount).toFixed(2));
 
     // Update admin's transactionFeeCollected if a fee was applied
     if (adminDeduction > 0) {
@@ -415,7 +418,7 @@ const withdraw = async (req, res) => {
         admin = JSON.parse(cachedAdmin);
       } else {
         admin = await Admin.findOne({ referralCode: "admin123" }).session(
-          session
+          session,
         );
         if (admin) {
           await redisClient
@@ -423,7 +426,7 @@ const withdraw = async (req, res) => {
             .catch((err) => {
               console.warn(
                 `Redis set error for ${adminCacheKey}:`,
-                err.message
+                err.message,
               );
             });
         }
@@ -431,12 +434,12 @@ const withdraw = async (req, res) => {
 
       if (admin) {
         admin.transactionFeeCollected = Number(
-          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2)
+          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2),
         );
         await Admin.updateOne(
           { referralCode: "admin123" },
           { transactionFeeCollected: admin.transactionFeeCollected },
-          { session }
+          { session },
         );
       } else {
         console.warn("Admin not found for updating transactionFeeCollected");
@@ -459,14 +462,14 @@ const withdraw = async (req, res) => {
           requestedAmount: amount,
         },
       ],
-      { session }
+      { session },
     );
 
     // Save user changes
     await User.updateOne(
       { _id: user._id },
       { [walletObj]: user[walletObj] },
-      { session }
+      { session },
     );
 
     // Check if withdrawal amount is ≤ 500 USDT for automatic processing
@@ -481,7 +484,7 @@ const withdraw = async (req, res) => {
       }
       privateKey = decryptPrivateKey(
         config.ENCRYPTED_PRIVATE_KEY,
-        encryptionKey
+        encryptionKey,
       );
 
       const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
@@ -489,16 +492,16 @@ const withdraw = async (req, res) => {
       const contract = new ethers.Contract(
         config.WITHDRAW_CONTRACT_ADDRESS,
         config.WITHDRAW_CONTRACT_ABI,
-        walletSigner
+        walletSigner,
       );
 
       const usdtContract = new ethers.Contract(
         config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
         config.USDT_CONTRACT_ABI, // Replace with USDT ABI
-        provider
+        provider,
       );
       const contractBalance = await usdtContract.balanceOf(
-        config.WITHDRAW_CONTRACT_ADDRESS
+        config.WITHDRAW_CONTRACT_ADDRESS,
       );
 
       const decimals = 18; // For USDT; adjust if needed
@@ -512,8 +515,8 @@ const withdraw = async (req, res) => {
         throw new Error(
           `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
             contractBalance,
-            18
-          )} USDT available, ${netAmount} USDT required`
+            18,
+          )} USDT available, ${netAmount} USDT required`,
         );
       }
 
@@ -524,7 +527,7 @@ const withdraw = async (req, res) => {
       await Withdrawal.updateOne(
         { _id: withdrawal[0]._id },
         { status: "completed", transactionHash: tx.hash },
-        { session }
+        { session },
       );
 
       // Commit the database transaction after blockchain success
@@ -544,7 +547,7 @@ const withdraw = async (req, res) => {
           status: "completed",
           walletAddress: user.walletAddress,
           txHash: tx.hash,
-        })
+        }),
       );
 
       console.log(
@@ -552,9 +555,9 @@ const withdraw = async (req, res) => {
           user._id
         }: requested $${amount.toFixed(4)}, ` +
           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-            4
+            4,
           )} ` +
-          `from ${walletType} wallet, txHash: ${tx.hash}`
+          `from ${walletType} wallet, txHash: ${tx.hash}`,
       );
     } else {
       // For amounts > 500 USDT, commit transaction and keep withdrawal pending
@@ -575,8 +578,8 @@ const withdraw = async (req, res) => {
             walletType,
             status: "pending",
             walletAddress: user.walletAddress,
-          }
-        )
+          },
+        ),
       );
 
       console.log(
@@ -584,9 +587,9 @@ const withdraw = async (req, res) => {
           user._id
         }: requested $${amount.toFixed(4)}, ` +
           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-            4
+            4,
           )} ` +
-          `from ${walletType} wallet`
+          `from ${walletType} wallet`,
       );
     }
   } catch (error) {
@@ -647,15 +650,13 @@ const withdraw = async (req, res) => {
     logger.error(
       `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
       error.message,
-      error.stack
+      error.stack,
     );
     res.status(500).json(errorResponse(error.message));
   } finally {
     session.endSession();
   }
 };
-
-
 
 // Get withdrawal history for all users (admin only)
 const getWithdrawalHistory = async (req, res) => {
@@ -739,8 +740,6 @@ const getWalletDetails = async (req, res) => {
     res.status(500).json(errorResponse(error.message));
   }
 };
-
-
 
 // Referral data
 
@@ -975,14 +974,13 @@ const getReferralData = async (req, res) => {
 //   }
 // };
 
-
 const getTeamTreeView = async (req, res) => {
   try {
-    const { userId,  search = "" } = req.query;
+    const { userId, search = "" } = req.query;
 
     // 🔍 Logged-in user
     const authUser = await User.findById(req.user.id).select(
-      "userId referralCode totalInvested"
+      "userId referralCode totalInvested",
     );
 
     if (!authUser) {
@@ -1008,20 +1006,18 @@ const getTeamTreeView = async (req, res) => {
     const buildTree = async (parentUserId, level = 1) => {
       const children = await User.find({ referredBy: parentUserId })
         .lean()
-        .select(
-          "userId username name email totalInvested referralCode"
-        );
+        .select("userId username name email totalInvested referralCode");
 
       if (!children.length) return [];
 
       const result = await Promise.all(
         children.map(async (child) => {
-        const subChildren = await buildTree(child.referralCode, level + 1);
+          const subChildren = await buildTree(child.referralCode, level + 1);
 
           // 🔥 Calculate team investment
           const teamInvestment = subChildren.reduce(
             (sum, c) => sum + (c.selfInvestment + c.teamInvestment),
-            0
+            0,
           );
 
           return {
@@ -1036,7 +1032,7 @@ const getTeamTreeView = async (req, res) => {
             level,
             children: subChildren,
           };
-        })
+        }),
       );
 
       return result;
@@ -1076,9 +1072,8 @@ const getTeamTreeView = async (req, res) => {
 
     // 🔥 Calculate total team investment
     const totalTeamInvestment = treeChildren.reduce(
-      (sum, node) =>
-        sum + node.selfInvestment + node.teamInvestment,
-      0
+      (sum, node) => sum + node.selfInvestment + node.teamInvestment,
+      0,
     );
 
     return res.status(200).json({
@@ -1111,10 +1106,6 @@ const getTeamTreeView = async (req, res) => {
     });
   }
 };
-
-
-
-
 
 const getLevelWiseIncome = async (req, res) => {
   try {
@@ -1207,7 +1198,7 @@ const getDirectTeam = async (req, res) => {
 
     // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalInvested"
+      "referralCode totalInvested",
     );
 
     if (!user) {
@@ -1271,14 +1262,13 @@ const getDirectTeam = async (req, res) => {
   }
 };
 
-
 const getIndirectTeam = async (req, res) => {
   try {
     const { page = 1, limit = 10, level } = req.query;
 
     // 🔍 Logged-in user
     const user = await User.findById(req.user.id).select(
-      "referralCode totalInvested"
+      "referralCode totalInvested",
     );
 
     if (!user) {
@@ -1338,20 +1328,18 @@ const getIndirectTeam = async (req, res) => {
     };
 
     let allIndirectUsers = await getDownline(
-      directReferrals.map((u) => u.referralCode)
+      directReferrals.map((u) => u.referralCode),
     );
 
     // 🎯 Filter by level (optional)
     if (level) {
       const lvl = parseInt(level);
-      allIndirectUsers = allIndirectUsers.filter(
-        (u) => u.level === lvl
-      );
+      allIndirectUsers = allIndirectUsers.filter((u) => u.level === lvl);
     }
 
     // 📊 Sort latest first
     allIndirectUsers.sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
     );
 
     const total = allIndirectUsers.length;
@@ -1436,9 +1424,9 @@ const getDailyROI = async (req, res) => {
     const formattedData = distributions.map((dist, index) => ({
       sr: (page - 1) * limit + index + 1,
       investmentId: dist.investmentId,
-      amount: dist.amount,                    // daily ROI tokens
-      totalTokens: dist.totalTokens,          // total tokens from this investment
-      dailyROI: dist.dailyROI,                // daily ROI percentage
+      amount: dist.amount, // daily ROI tokens
+      totalTokens: dist.totalTokens, // total tokens from this investment
+      dailyROI: dist.dailyROI, // daily ROI percentage
       stakeAmount: dist.stakeAmount,
       distributionDate: dist.distributionDate,
     }));
@@ -1457,7 +1445,7 @@ const getDailyROI = async (req, res) => {
           limit: parseInt(limit),
           totalPages: Math.ceil(total / limit),
         },
-      })
+      }),
     );
   } catch (error) {
     console.error("Error fetching daily ROI:", error);
@@ -1498,22 +1486,25 @@ const getReferralIncome = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     // Fetch data
-    const referrals = await Referral.find(query)          // ← Changed to Referral
+    const referrals = await Referral.find(query) // ← Changed to Referral
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
       .lean();
 
     // Total income
-    const totalReferralIncome = await Referral.aggregate([   // ← Changed to Referral
+    const totalReferralIncome = await Referral.aggregate([
+      // ← Changed to Referral
       { $match: query },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]).then((res) => res[0]?.total || 0);
 
     // Total records
-    const totalRecords = await Referral.countDocuments(query);  // ← Changed to Referral
+    const totalRecords = await Referral.countDocuments(query); // ← Changed to Referral
 
-    console.log(`📊 Found ${totalRecords} referral records for user ${user.userId}`);
+    console.log(
+      `📊 Found ${totalRecords} referral records for user ${user.userId}`,
+    );
 
     const formattedReferrals = referrals.map((ref, index) => ({
       sr: skip + index + 1,
@@ -1529,7 +1520,9 @@ const getReferralIncome = async (req, res) => {
     res.status(200).json(
       successResponse("Referral income retrieved successfully", {
         selfInvestment: user.totalSelfInvestment || 0,
-        teamInvestment: await calculateDownlineInvestment(user.referralCode).catch(() => 0),
+        teamInvestment: await calculateDownlineInvestment(
+          user.referralCode,
+        ).catch(() => 0),
         referralCount: totalRecords,
         totalReferralIncome: parseFloat(totalReferralIncome.toFixed(2)),
         referrals: formattedReferrals,
@@ -1539,15 +1532,13 @@ const getReferralIncome = async (req, res) => {
           limit: Number(limit),
           totalPages: Math.ceil(totalRecords / Number(limit)),
         },
-      })
+      }),
     );
   } catch (error) {
     console.error("❌ Error fetching referral income:", error);
     res.status(500).json(errorResponse(error.message));
   }
 };
-
-
 
 const getUserProfile = async (req, res) => {
   try {
@@ -1559,7 +1550,6 @@ const getUserProfile = async (req, res) => {
       success: true,
       user,
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -1567,8 +1557,6 @@ const getUserProfile = async (req, res) => {
     });
   }
 };
-
-
 
 const CreateInvestment = async (req, res) => {
   try {
@@ -1628,7 +1616,6 @@ const CreateInvestment = async (req, res) => {
       message: "Investment successful",
       investment,
     });
-
   } catch (error) {
     console.error("Investment Error:", error);
     res.status(500).json({
@@ -1637,13 +1624,6 @@ const CreateInvestment = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-
 
 const updateUserProfilePassword = async (req, res) => {
   try {
@@ -1705,8 +1685,6 @@ const updateUserProfilePassword = async (req, res) => {
     res.status(500).json(errorResponse(error.message));
   }
 };
-
-
 
 const sendSupportEmail = async (req, res) => {
   try {
@@ -1920,47 +1898,38 @@ const logout = async (req, res) => {
   }
 };
 
-
-
-
-
 // Gouri Code
-
-
-
 
 const NETWORK_CONFIG = {
   WEB20_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/erc20/usdt/create/"
+    url: "https://api.cryptapi.io/erc20/usdt/create/",
   },
 
   BASE_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/base/usdt/create/"
+    url: "https://api.cryptapi.io/base/usdt/create/",
   },
 
   BASE_USDC: {
     coin: "USDC",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/base/usdc/create/"
+    url: "https://api.cryptapi.io/base/usdc/create/",
   },
 
   POLYGON_USDT: {
     coin: "USDT",
     wallet: process.env.EVM_WALLET,
-    url: "https://api.cryptapi.io/polygon/usdt/create/"
+    url: "https://api.cryptapi.io/polygon/usdt/create/",
   },
   BEP20_USDT: {
     coin: "USDT",
-    wallet: process.env.EVM_WALLET,       
-    url: "https://api.cryptapi.io/bep20/usdt/create/"
-  }
+    wallet: process.env.EVM_WALLET,
+    url: "https://api.cryptapi.io/bep20/usdt/create/",
+  },
 };
-
-
 
 const createDeposit = async (req, res) => {
   try {
@@ -1968,21 +1937,29 @@ const createDeposit = async (req, res) => {
 
     // 🔐 Validation
     if (!userId) {
-      return res.status(400).json({ success: false, message: "userId required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "userId required" });
     }
 
     if (!amount || Number(amount) <= 0) {
-      return res.status(400).json({ success: false, message: "Valid amount required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid amount required" });
     }
 
     const user = await User.findOne({ userId });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const config = NETWORK_CONFIG[network];
     if (!config || !config.wallet) {
-      return res.status(400).json({ success: false, message: "Invalid network" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid network" });
     }
 
     console.log(`🚀 Creating deposit for ${userId}`);
@@ -1993,7 +1970,7 @@ const createDeposit = async (req, res) => {
       amount: Number(amount),
       coin: config.coin,
       network,
-      status: "initiated"
+      status: "initiated",
     });
 
     // 🔔 Callback URL (IMPORTANT)
@@ -2006,8 +1983,8 @@ const createDeposit = async (req, res) => {
         callback: callbackUrl,
         order_id: deposit._id.toString(),
         multi_token: 1,
-        json: 1
-      }
+        json: 1,
+      },
     });
 
     const data = response.data;
@@ -2018,7 +1995,7 @@ const createDeposit = async (req, res) => {
       await Deposit.findByIdAndDelete(deposit._id);
       return res.status(400).json({
         success: false,
-        message: data?.message || "CryptAPI error"
+        message: data?.message || "CryptAPI error",
       });
     }
 
@@ -2032,7 +2009,7 @@ const createDeposit = async (req, res) => {
 
     console.log("✅ Deposit Created:", {
       depositId: deposit._id,
-      uuid: deposit.uuid
+      uuid: deposit.uuid,
     });
 
     return res.json({
@@ -2042,19 +2019,17 @@ const createDeposit = async (req, res) => {
         address: data.address_in,
         coin: config.coin,
         network,
-        amount: Number(amount)
-      }
+        amount: Number(amount),
+      },
     });
-
   } catch (err) {
     console.error("❌ Deposit Error:", err.message);
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
-
 
 // ?callBack
 
@@ -2064,7 +2039,7 @@ const depositCallback = async (req, res) => {
 
     const data = {
       ...req.query,
-      ...req.body
+      ...req.body,
     };
 
     console.log("📦 FULL DATA:", data);
@@ -2077,7 +2052,7 @@ const depositCallback = async (req, res) => {
       txid,
       txid_in,
       confirmations,
-      secret
+      secret,
     } = data;
 
     const finalTxid = txid_in || txid;
@@ -2110,7 +2085,7 @@ const depositCallback = async (req, res) => {
 
     console.log("✅ MATCHED DEPOSIT:", {
       uuid: deposit.uuid,
-      order_id: deposit._id
+      order_id: deposit._id,
     });
 
     // ✅ Already completed
@@ -2135,7 +2110,7 @@ const depositCallback = async (req, res) => {
 
     // 🔁 Duplicate TX check
     const existingTx = await Deposit.findOne({
-      transactionHash: finalTxid
+      transactionHash: finalTxid,
     });
 
     if (existingTx) {
@@ -2146,7 +2121,7 @@ const depositCallback = async (req, res) => {
     const lockedDeposit = await Deposit.findOneAndUpdate(
       { _id: deposit._id, status: { $ne: "completed" } },
       { status: "processing" },
-      { new: true }
+      { new: true },
     );
 
     if (!lockedDeposit) {
@@ -2180,18 +2155,15 @@ const depositCallback = async (req, res) => {
     console.log("✅ Deposit SUCCESS:", {
       userId: user._id,
       credited: finalAmount,
-      txid: finalTxid
+      txid: finalTxid,
     });
 
     return res.send("OK");
-
   } catch (error) {
     console.error("❌ Callback Error:", error.message);
     return res.send("Error handled");
   }
 };
-
-
 
 const getDeposits = async (req, res) => {
   try {
@@ -2205,7 +2177,7 @@ const getDeposits = async (req, res) => {
 
     // 🔍 Build filter
     const filter = {
-      userId: userId
+      userId: userId,
     };
 
     // 📅 Date filter (optional)
@@ -2237,32 +2209,26 @@ const getDeposits = async (req, res) => {
         total,
         page,
         pages: Math.ceil(total / limit),
-        limit
+        limit,
       },
-      deposits
+      deposits,
     });
-
   } catch (error) {
     console.error("❌ Get Deposits Error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
-
-
-
-
-
 
 const logCallback = async ({
   req,
   data,
   status = "pending",
   message = "",
-  network = ""
+  network = "",
 }) => {
   try {
     await DepositCallbackLog.create({
@@ -2288,14 +2254,12 @@ const logCallback = async ({
       // 🔥 Extra Debug Info
       ip: req?.ip,
       method: req?.method,
-      headers: req?.headers
+      headers: req?.headers,
     });
-
   } catch (err) {
     console.error("❌ Log save failed:", err.message);
   }
 };
-
 
 // Update Walter if already Connected
 const updateWallet = async (req, res) => {
@@ -2316,7 +2280,7 @@ const updateWallet = async (req, res) => {
     const user = await User.findOneAndUpdate(
       { _id: userId, isActive: true },
       { walletAddress },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
@@ -2331,7 +2295,6 @@ const updateWallet = async (req, res) => {
       message: "Wallet updated successfully",
       user,
     });
-
   } catch (error) {
     console.error("Wallet update error:", error);
     res.status(500).json({
@@ -2340,7 +2303,6 @@ const updateWallet = async (req, res) => {
     });
   }
 };
-
 
 // ADD Wallet If user is coming First Time
 const addWalletFirstTime = async (req, res) => {
@@ -2382,7 +2344,6 @@ const addWalletFirstTime = async (req, res) => {
       message: "Wallet added successfully",
       user,
     });
-
   } catch (error) {
     console.error("Add wallet error:", error);
     res.status(500).json({
@@ -2391,18 +2352,6 @@ const addWalletFirstTime = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
 
 module.exports = {
   requestWithdrawalOtp,
@@ -2424,7 +2373,6 @@ module.exports = {
   getDirectTeam,
   getIndirectTeam,
 
-
   sendSupportEmail,
   contactFormEmail,
   logout,
@@ -2434,6 +2382,4 @@ module.exports = {
   updateWallet,
   addWalletFirstTime,
   getDeposits,
-  
-
 };

@@ -12,7 +12,7 @@ const {
   getDailyROI,
   getUserProfile,
   updateUserProfilePassword,
-   requestWithdrawalOtp,
+  requestWithdrawalOtp,
   withdraw,
   getWithdrawalHistory,
   getReferralIncome,
@@ -91,8 +91,6 @@ router.post("/deposit/qr", authMiddleware(["user"]), createQrDeposit);
 // Public callback route (Fintolite will call this)
 // router.post('/deposit/callback', paymentCallback);
 
-
-
 // Sidebar Menu Routes (Requires Authentication)
 router.get("/dashboard", authMiddleware(["user"]), getDashboard);
 router.get("/wallet", authMiddleware(["user"]), getWalletDetails);
@@ -115,12 +113,16 @@ router.post("/2fa/verify", authMiddleware(["user"]), verify2FA);
 router.post("/2fa/disable", authMiddleware(["user"]), disable2FA);
 
 // Withdrawal Routes
-router.post("/request-withdrawal-otp", authMiddleware(["user"]), requestWithdrawalOtp);
+router.post(
+  "/request-withdrawal-otp",
+  authMiddleware(["user"]),
+  requestWithdrawalOtp,
+);
 router.post("/withdraw", authMiddleware(["user"]), withdraw);
 router.get(
   "/withdrawal-history",
   authMiddleware(["user"]),
-  getWithdrawalHistory
+  getWithdrawalHistory,
 );
 
 // Wallet Address Update Routes

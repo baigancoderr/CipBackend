@@ -32,17 +32,18 @@ const investInPlan = async (req, res) => {
       });
     }
 
-    // 💰 Balance check
-    if (user.walletBalance < amount) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient balance",
-      });
+  // Safely initialize wallets if not present
+    user.wallets = user.wallets || {};
+    user.wallets.deposit = user.wallets.deposit || { amount: 0 };
+
+    // 💰 Balance check (deposit wallet)
+    if (user.wallets.deposit.amount < amount) {
+      return res.status(400).json(errorResponse("Insufficient balance in deposit wallet"));
     }
 
-    // 💸 Deduct balance
-    user.walletBalance -= amount;
-    user.totalInvested += amount;
+    // 💸 Deduct from deposit wallet (CORRECT WAY)
+    user.wallets.deposit.amount -= amount;
+    user.totalInvested = (user.totalInvested || 0) + amount;
     await user.save();
 
     // 📊 Get current SGN price
