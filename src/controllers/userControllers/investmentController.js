@@ -66,9 +66,15 @@ const investInPlan = async (req, res) => {
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + totalDays);
 
+    const purchaseId = `INV${Date.now()}`;
+
+    // 🆕 Generate unique investment ID
+    const investmentId = `INV${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
     // 🆕 Save investment
     const investment = await Investment.create({
       userId: user.userId,
+      investmentId,
       amount,
       tokensReceived,
       sgnPriceAtInvestment: sgnPrice,
@@ -92,7 +98,7 @@ const investInPlan = async (req, res) => {
 
     res.status(201).json(
       successResponse(
-        "Investment request submitted successfully",
+        "Investment successfully",
         {
           investmentId: investment._id,
           amount: investment.amount,
@@ -111,52 +117,71 @@ const investInPlan = async (req, res) => {
 
 const getUserInvestments = async (req, res) => {
   try {
-    // First, verify the user by finding their record using the authenticated user's ID (_id)
-    const user = await User.findById(req.user.id).select("user_id");
+    const user = await User.findById(req.user.id).select("userId");
     if (!user) {
       return res.status(404).json(errorResponse("User not found"));
     }
 
-    console.log(`Fetching investments for user ID: ${user.user_id}`);
-
-    // Extract query parameters for pagination and filtering
     const { page = 1, limit = 10, status, startDate, endDate } = req.query;
 
-    // Build the query object
-    const query = { user_id: user.user_id };
+    const query = { userId: user.userId };
 
-    if (status) {
-      query.status = status;
-    }
-
+    if (status) query.status = status;
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    // Get total count for pagination
-    const total = await Investment.countDocuments(query);
-
-    // Fetch paginated investments
+    // 1. Paginated investments
     const investments = await Investment.find(query)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .lean();
 
+    // 2. Totals using aggregation (efficient)
+    const totals = await Investment.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalInvestedAmount: { $sum: "$amount" },
+          totalReturnTokens: { $sum: "$totalReturnTokens" },
+          totalClaimedTokens: {
+            $sum: {
+              $multiply: ["$claimedDays", "$dailyIncomeTokens"]
+            }
+          }
+        }
+      }
+    ]);
+
+    const summary = totals[0] || {
+      totalInvestedAmount: 0,
+      totalReturnTokens: 0,
+      totalClaimedTokens: 0,
+    };
+
+    const totalCount = await Investment.countDocuments(query);
+
     res.status(200).json(
-      successResponse("User investments retrieved", {
+      successResponse("User investments retrieved successfully", {
         investments,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-      }),
+        summary: {
+          totalInvestedAmount: parseFloat(summary.totalInvestedAmount.toFixed(2)),
+          totalReturnTokens: parseFloat(summary.totalReturnTokens.toFixed(8)),
+          totalClaimedTokens: parseFloat(summary.totalClaimedTokens.toFixed(8)),
+        },
+        pagination: {
+          total: totalCount,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(totalCount / limit),
+        },
+      })
     );
   } catch (error) {
+    console.error("Get user investments error:", error);
     res.status(500).json(errorResponse(error.message));
   }
 };

@@ -2,9 +2,16 @@ const mongoose = require("mongoose");
 
 const investmentSchema = new mongoose.Schema(
   {
+
     userId: {
       type: String,
       required: true,
+    },
+
+    investmentId: {
+      type: String,
+      required: true,
+      unique: true,
     },
 
     amount: {
@@ -37,6 +44,11 @@ const investmentSchema = new mongoose.Schema(
     dailyIncome: {
       type: Number,
       required: true, // totalReturn / 700 (fiat me)
+    },
+
+    claimedTokens: {
+      type: Number,
+      default: 0, // kitne tokens claim ho chuke hain
     },
 
     // ====================== RETURN IN TOKEN (NEW) ======================

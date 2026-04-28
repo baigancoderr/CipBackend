@@ -39,6 +39,7 @@ async function distributeDailyROI() {
       // ====================== UPDATE INVESTMENT ======================
       investment.claimedDays += 1;
       investment.lastClaimedAt = now;
+      investment.claimedTokens = (investment.claimedTokens || 0) + dailyTokens;
 
       // If fully claimed → mark as completed
       if (investment.claimedDays >= investment.totalDays) {

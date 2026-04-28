@@ -70,351 +70,10 @@ const calculateDownlineUsers = async (referralCode) => {
   return downlineUsers;
 };
 
-// const getDashboard = async (req, res) => {
-//   try {
-//     const user = await User.findById(req.user.id).select(
-//       "first_name username shopping_points loyalty_points rank walletAddress myWallet depositWallet emgtWallet principalWallet referralWallet binary_daily_cap totalSelfInvestment totalAllRewards totalReferralRewards totalBinaryRewards totalLeadershipRewards totalLevelRewards totalTokenizedInvestment totalReadyInvestment totalUnderconstructionInvestment email referralCode leadershipShares",
-//     );
-//     if (!user) return res.status(404).json(errorResponse("User not found"));
-
-//     // User Details
-//     const firstName = user.first_name || "User";
-//     const userName = user.username;
-//     const referralCode = user.referralCode;
-
-//     // Wallet Balances
-//     const myWallet = user.myWallet?.amount || 0;
-//     const depositWallet = user.depositWallet?.amount || 0;
-//     const totalInvestment = user.totalSelfInvestment || 0;
-//     const principalWallet = user.principalWallet?.amount || 0;
-//     const emgtWallet = user.emgtWallet?.amount || 0;
-//     const referralWallet = user.referralWallet?.amount || 0;
-//     const totalWalletBalance =
-//       myWallet + depositWallet + principalWallet + referralWallet;
-//     const userRank = user.rank || "Bronze";
-//     // All Type of reward
-
-//     const totalAllRewards = user.totalAllRewards || 0;
-//     const roiRewards = await RoiDistribution.find({ userId: user._id });
-//     const referralRewards = await ReferralReward.find({ referrerId: user._id });
-//     const levelRewards = await LevelReward.find({ userId: user._id });
-//     const totalShoppingPoint = user.shopping_points || 0;
-//     const totalLoyaltyPoints = user.loyalty_points || 0;
-
-//     const totalEarningWithoutCap = Number(
-//       roiRewards + referralRewards + levelRewards,
-//     ).toFixed(2);
-
-//     // Profit Tracker
-//     const stakes = await Stake.find({ userId: user._id, status: "completed" });
-//     const investment = stakes.reduce((sum, stake) => sum + stake.amount, 0);
-
-//     // Incomes
-//     const roiIncome = await RoiDistribution.aggregate([
-//       { $match: { userId: user._id } },
-//       { $group: { _id: null, total: { $sum: "$amount" } } },
-//     ]).then((result) => result[0]?.total || 0);
-
-//     const referralIncome = user.totalReferralRewards || 0;
-//     const levelIncomeReward = user.totalLevelRewards || 0;
-
-//     // Calculate total earnings
-//     const earning = roiIncome + referralIncome + levelIncomeReward;
-//     const earningWithoutCap = roiIncome + levelIncomeReward;
-
-//     // Daily and Monthly Income
-//     const dailyIncome = await Promise.all([
-//       ReferralReward.aggregate([
-//         {
-//           $match: {
-//             referrerId: user._id,
-//             createdAt: { $gte: moment().startOf("day").toDate() },
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$earned" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//       RoiDistribution.aggregate([
-//         {
-//           $match: {
-//             userId: user._id,
-//             distributionDate: { $gte: moment().startOf("day").toDate() },
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$amount" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//       LevelReward.aggregate([
-//         {
-//           $match: {
-//             userId: user._id,
-//             distributionDate: { $gte: moment().startOf("day").toDate() },
-//             status: "completed",
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$rewardAmount" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//     ]).then(
-//       ([referralDaily, roiDaily, levelDaily]) =>
-//         referralDaily + roiDaily + levelDaily,
-//     );
-
-//     const monthlyIncome = await Promise.all([
-//       ReferralReward.aggregate([
-//         {
-//           $match: {
-//             referrerId: user._id,
-//             createdAt: { $gte: moment().startOf("month").toDate() },
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$earned" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//       RoiDistribution.aggregate([
-//         {
-//           $match: {
-//             userId: user._id,
-//             distributionDate: { $gte: moment().startOf("month").toDate() },
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$amount" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//       LevelReward.aggregate([
-//         {
-//           $match: {
-//             userId: user._id,
-//             distributionDate: { $gte: moment().startOf("month").toDate() },
-//             status: "completed",
-//           },
-//         },
-//         { $group: { _id: null, total: { $sum: "$rewardAmount" } } },
-//       ]).then((result) => result[0]?.total || 0),
-//     ]).then(
-//       ([referralMonthly, roiMonthly, levelMonthly]) =>
-//         referralMonthly + roiMonthly + levelMonthly,
-//     );
-
-//     const earningTimes =
-//       earningWithoutCap > 0 && investment > 0
-//         ? (earningWithoutCap / investment).toFixed(2)
-//         : "0.00";
-//     // Calculate remaining ROI
-
-//     // Team Business Overview
-//     const directUsers = await User.find({
-//       referredBy: user.referralCode,
-//     }).select("_id");
-//     const directBusiness = await Deposit.aggregate([
-//       {
-//         $match: {
-//           userId: { $in: directUsers.map((u) => u._id) },
-//           status: "completed",
-//         },
-//       },
-//       { $group: { _id: null, total: { $sum: "$amount" } } },
-//     ]).then((result) => result[0]?.total || 0);
-
-//     const totalTeamBusiness = await calculateDownlineInvestment(
-//       user.referralCode,
-//     );
-//     const todayTeamBusiness = await Deposit.aggregate([
-//       {
-//         $match: {
-//           userId: {
-//             $in: await User.find({ referredBy: user.referralCode }).distinct(
-//               "_id",
-//             ),
-//           },
-//           createdAt: { $gte: moment().startOf("day").toDate() },
-//         },
-//       },
-//       { $group: { _id: null, total: { $sum: "$amount" } } },
-//     ]).then((result) => result[0]?.total || 0);
-
-//     // Team Stats
-//     const myDirect = directUsers.length;
-//     const totalTeam = (await calculateDownlineUsers(user.referralCode)).length;
-//     const indirect = totalTeam - myDirect;
-
-//     const totalWithdraw = await Withdrawal.aggregate([
-//       { $match: { userId: user._id, status: "completed" } },
-//       { $group: { _id: null, total: { $sum: "$amount" } } },
-//     ]).then((result) => result[0]?.total || 0);
-
-//     const tokenPriceDoc = await Price.findOne({ currencyType: "SGN" }).lean();
-//     const tokenPriceValue = tokenPriceDoc ? tokenPriceDoc.price : 0;
-
-//     // Latest Level Income Details
-//     const latestLevelReward = await LevelReward.findOne({
-//       userId: user._id,
-//       status: "completed",
-//     })
-//       .sort({ distributionDate: -1 })
-//       .lean();
-//     const latestLevelRank = latestLevelReward ? latestLevelReward.rank : "None";
-//     const latestLevelRewardAmount = latestLevelReward
-//       ? latestLevelReward.rewardAmount
-//       : 0;
-//     const latestTeamTotalRoi = latestLevelReward
-//       ? latestLevelReward.teamTotalRoiRewardDistributed
-//       : 0;
-//     const latestStrongLegInvestment = latestLevelReward
-//       ? latestLevelReward.stronglegInvestment
-//       : 0;
-//     const latestWeakestLegInvestment = latestLevelReward
-//       ? latestLevelReward.weakestLegInvestment
-//       : 0;
-//     const latestTotalTeamInvestment = latestLevelReward
-//       ? latestLevelReward.totalTeamInvestment
-//       : 0;
-
-//     res.status(200).json(
-//       successResponse("Dashboard data retrieved", {
-//         firstName,
-//         userName,
-//         referralCode,
-//         walletAddress: user.walletAddress,
-//         wallets: {
-//           totalAllRewards: `$${totalAllRewards.toFixed(2)}`,
-//           myWallet: `$${myWallet.toFixed(2)}`,
-//           depositWallet: `$${depositWallet.toFixed(2)}`,
-//           totalInvestment: `$${totalInvestment.toFixed(2)}`,
-//           emgtWallet: `${emgtWallet.toFixed(2)}`,
-//           referralWallet: `$${referralWallet.toFixed(2)}`,
-//           principalWallet: `$${principalWallet.toFixed(2)}`,
-//           totalWalletBalance: `$${totalWalletBalance.toFixed(2)}`,
-//           totalLevelRewards: `$${levelIncomeReward.toFixed(2)}`,
-//           latestLevelReward: `$${latestLevelRewardAmount.toFixed(2)}`,
-//           totalShoppingPoint: `${totalShoppingPoint.toFixed(2)}`,
-//           totalLoyaltyPoints: `${totalLoyaltyPoints.toFixed(2)}`,
-//           latestLevelRank,
-//         },
-//         profitTracker: {
-//           investment: `$${investment.toFixed(2)}`,
-//           earning: `$${earning.toFixed(2)}`,
-//           earningWithoutCap: `$${earningWithoutCap.toFixed(2)}`,
-//           earningTimes: `${earningTimes}X`,
-//         },
-//         teamBusiness: {
-//           directBusiness: `$${directBusiness.toFixed(2)}`,
-//           totalTeamBusiness: `$${totalTeamBusiness.toFixed(2)}`,
-//           todayTeamBusiness: `$${todayTeamBusiness.toFixed(2)}`,
-//         },
-//         incomes: {
-//           roiIncome: `$${roiIncome.toFixed(2)}`,
-//           referralIncome: `$${referralIncome.toFixed(2)}`,
-//           totalLevelRewards: `$${levelIncomeReward.toFixed(2)}`,
-//           dailyIncome: `$${dailyIncome.toFixed(2)}`,
-//           monthlyIncome: `$${monthlyIncome.toFixed(2)}`,
-//         },
-//         transactions: {
-//           totalEarning: `$${earning.toFixed(2)}`,
-//           totalWithdraw: `${totalWithdraw.toFixed(2)}`,
-//         },
-//         teamStats: {
-//           totalTeam,
-//           myDirect,
-//           indirect,
-//         },
-//         tokenOverview: {
-//           price: `${tokenPriceValue.toFixed(2)}`,
-//         },
-//         referralLink: `${process.env.WEBSITE_URL}/user/signup?referral=${user.referralCode}`,
-//         userEmail: user.email,
-//         userRank: userRank,
-//         levelIncomeDetails: latestLevelReward
-//           ? {
-//               rank: latestLevelRank,
-//               rewardAmount: `$${latestLevelRewardAmount.toFixed(2)}`,
-//               teamTotalRoi: `$${latestTeamTotalRoi.toFixed(2)}`,
-//               strongLegInvestment: `$${latestStrongLegInvestment.toFixed(2)}`,
-//               weakestLegInvestment: `$${latestWeakestLegInvestment.toFixed(2)}`,
-//               totalTeamInvestment: `$${latestTotalTeamInvestment.toFixed(2)}`,
-//               distributionDate: moment(
-//                 latestLevelReward.distributionDate,
-//               ).format("YYYY-MM-DD HH:mm:ss"),
-//             }
-//           : null,
-//       }),
-//     );
-//   } catch (error) {
-//     console.error("Error in getDashboard:", error);
-//     res.status(500).json(errorResponse(error.message));
-//   }
-// };
-
-// const getDashboard = async (req, res) => {
-//   try {
-//     const user = await User.findById(req.user.id).select(
-//       "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage totalReferrals isActive"
-//     );
-
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found",
-//       });
-//     }
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Dashboard data retrieved successfully",
-//       user: {
-//         userId: user.userId,
-//         name: user.name,
-//         username: user.username,
-//         referralCode: user.referralCode,
-//         isActive: user.isActive,
-//       },
-//       dashboard: {
-//         stats: [
-//           { 
-//             title: "LIVE PRICE", 
-//             value: "$0.12" 
-//           },
-//           { 
-//             title: "TOTAL DEPOSIT", 
-//             value: `$${user.totalInvested.toFixed(2)}` 
-//           },
-//           { 
-//             title: "WALLET BALANCE", 
-//             value: `$${user.walletBalance.toFixed(2)}` 
-//           },
-//           { 
-//             title: "TOTAL EARNINGS", 
-//             value: `$${user.totalEarnings.toFixed(2)}` 
-//           },
-//           { 
-//             title: "ACTIVE PACKAGE", 
-//             value: `${user.activePackage} ` 
-//           },
-//           { 
-//             title: "TEAM", 
-//             value: `${user.totalReferrals} ` 
-//           },
-//         ],
-//         profitTracker: {
-//           totalInvested: user.totalInvested,
-//           totalEarnings: user.totalEarnings,
-//           dailyIncome: user.dailyIncome,
-//         },
-//         teamStats: {
-//           totalReferrals: user.totalReferrals,
-//           referralEarnings: user.referralEarnings,
-//         },
-//         referralLink: `https://t.me/cipera_bot?startapp=${user.referralCode}`,
-//         tokenPrice: 0.12,
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Dashboard Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to fetch dashboard data",
-//     });
-//   }
-// };
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive wallets"
     );
 
     if (!user) {
@@ -426,35 +85,26 @@ const getDashboard = async (req, res) => {
 
     // Ensure referralCode exists
     if (!user.referralCode) {
-      user.referralCode = `CPR${Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase()}`;
+      user.referralCode = `CPR${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       await user.save();
     }
 
-    // ✅ 1. DIRECT REFERRALS (LEVEL 1 ONLY)
+    // ====================== LIVE SGN PRICE ======================
+    const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
+    const sgnPrice = sgnPriceDoc?.price || 0.00;
+
+    // ====================== RECENT 5 INVESTMENTS ======================
+    const recentInvestments = await Investment.find({ userId: user.userId })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("amount tokensReceived totalReturnTokens dailyIncomeTokens status createdAt")
+      .lean();
+
+    // ====================== DIRECT REFERRALS ======================
     const directReferrals = await User.countDocuments({
       referredBy: user.referralCode,
       isActive: true,
     });
-
-    // ✅ 2. TOTAL TEAM (DIRECT + INDIRECT)
-    let totalTeam = 0;
-    let currentLevelCodes = [user.referralCode];
-
-    while (currentLevelCodes.length > 0) {
-      const users = await User.find({
-        referredBy: { $in: currentLevelCodes },
-        isActive: true,
-      }).select("referralCode");
-
-      if (users.length === 0) break;
-
-      totalTeam += users.length;
-
-      currentLevelCodes = users.map((u) => u.referralCode);
-    }
 
     // Referral Link
     const referralLink = `https://t.me/cipera_bot?startapp=${user.referralCode}`;
@@ -472,28 +122,37 @@ const getDashboard = async (req, res) => {
 
       dashboard: {
         stats: [
-          { title: "LIVE PRICE", value: "$0.12" },
+          { 
+            title: "LIVE PRICE (SGN)", 
+            value: `$${sgnPrice.toFixed(4)}` 
+          },
           {
             title: "TOTAL DEPOSIT",
-            value: `$${user.totalInvested?.toFixed(2) || "0.00"}`,
+            value: `$${(user.wallets?.deposit?.amount || user.totalInvested || 0).toFixed(2)}`,
           },
           {
             title: "WALLET BALANCE",
-            value: `$${user.walletBalance?.toFixed(2) || "0.00"}`,
+            value: `$${(user.walletBalance || 0).toFixed(2)}`,
           },
           {
             title: "TOTAL EARNINGS",
-            value: `$${user.totalEarnings?.toFixed(2) || "0.00"}`,
+            value: `$${(user.totalEarnings || 0).toFixed(2)}`,
+          },
+          {
+            title: "REFERRAL EARNINGS",
+            value: `$${(user.wallets?.referral?.amount || user.referralEarnings || 0).toFixed(2)}`,
+          },
+          {
+            title: "ROI EARNINGS",
+            value: `$${(user.wallets?.roi?.amount || 0).toFixed(2)}`,
           },
           {
             title: "ACTIVE PACKAGE",
             value: user.activePackage || "None",
           },
-
-          // 🔥 FULL TEAM COUNT
           {
-            title: "TEAM",
-            value: totalTeam.toString(),
+            title: "DIRECT TEAM",
+            value: directReferrals.toString(),
           },
         ],
 
@@ -501,22 +160,31 @@ const getDashboard = async (req, res) => {
           totalInvested: user.totalInvested || 0,
           totalEarnings: user.totalEarnings || 0,
           dailyIncome: user.dailyIncome || 0,
+          roiBalance: user.wallets?.roi?.amount || 0,
+          referralBalance: user.wallets?.referral?.amount || 0,
         },
 
         teamStats: {
-          // ✅ ONLY DIRECT
           totalReferrals: directReferrals,
-
-          referralEarnings: user.referralEarnings || 0,
+          referralEarnings: user.wallets?.referral?.amount || user.referralEarnings || 0,
         },
 
+        // 🔥 Latest 5 Investments
+        recentInvestments: recentInvestments.map((inv) => ({
+          amount: inv.amount,
+          tokensReceived: inv.tokensReceived,
+          totalReturnTokens: inv.totalReturnTokens,
+          dailyIncomeTokens: inv.dailyIncomeTokens,
+          status: inv.status,
+          date: inv.createdAt,
+        })),
+
         referralLink,
-        tokenPrice: 0.12,
+        tokenPrice: sgnPrice,
       },
     });
   } catch (error) {
     console.error("Dashboard Error:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to fetch dashboard data",

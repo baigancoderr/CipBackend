@@ -12,8 +12,8 @@ async function distributeReferralIncome(investorId, amount, productId, options =
     return;
   }
 
-  // Fixed 15% referral commission structure
-  const levelPercentages = [0, 7, 3, 2, 2, 1]; // index 1 = Level 1, index 5 = Level 5
+  // Fixed 15% referral commission structure (Level 1 to Level 5)
+  const levelPercentages = [7, 3, 2, 2, 1];   // ← 0 hataya gaya hai
 
   let currentUserId = investorId;
   let level = 1;
@@ -21,7 +21,7 @@ async function distributeReferralIncome(investorId, amount, productId, options =
 
   while (level <= 5) {
     // Get current investor in chain
-    const currentInvestor = await User.findOne({ user_id: currentUserId }).session(session || null);
+    const currentInvestor = await User.findOne({ userId: currentUserId }).session(session || null);
     if (!currentInvestor || !currentInvestor.referredBy) {
       console.log(`[Referral Income] Level ${level}: No further referrer found`);
       break;
@@ -34,16 +34,17 @@ async function distributeReferralIncome(investorId, amount, productId, options =
       break;
     }
 
-    const commissionPercent = levelPercentages[level];
+    const commissionPercent = levelPercentages[level - 1];   // ← Ab index level-1 se liya ja raha hai
     const commissionAmount = parseFloat((amount * (commissionPercent / 100)).toFixed(2));
 
     if (commissionAmount > 0) {
       // Credit to sponsor's wallet
-      sponsor.referralWallet = sponsor.referralWallet || { amount: 0 };
-      sponsor.referralWallet.amount += commissionAmount;
+      sponsor.wallets = sponsor.wallets || {};
+      sponsor.wallets.referral = sponsor.wallets.referral || { amount: 0 };
+      sponsor.wallets.referral.amount += commissionAmount;
 
-      sponsor.totalReferralRewards = (sponsor.totalReferralRewards || 0) + commissionAmount;
-      sponsor.totalAllRewards = (sponsor.totalAllRewards || 0) + commissionAmount;
+      sponsor.referralEarnings = (sponsor.referralEarnings || 0) + commissionAmount;
+      sponsor.totalEarnings = (sponsor.totalEarnings || 0) + commissionAmount;
 
       await sponsor.save({ session: session || null });
 
@@ -51,7 +52,7 @@ async function distributeReferralIncome(investorId, amount, productId, options =
       await Referral.create(
         [{
           userId: sponsor._id,
-          referrerId: sponsor.user_id,
+          referrerId: sponsor.userId,
           referredId: investorId,
           investmentAmount: amount,
           amount: commissionAmount,
@@ -65,11 +66,11 @@ async function distributeReferralIncome(investorId, amount, productId, options =
       );
 
       totalDistributed += commissionAmount;
-      console.log(`✅ Level ${level} (${commissionPercent}%) → ₹${commissionAmount} credited to ${sponsor.user_id}`);
+      console.log(`✅ Level ${level} (${commissionPercent}%) → ₹${commissionAmount} credited to ${sponsor.userId}`);
     }
 
     // Move up the referral chain
-    currentUserId = sponsor.user_id;
+    currentUserId = sponsor.userId;
     level++;
   }
 
