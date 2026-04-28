@@ -93,6 +93,15 @@ const getDashboard = async (req, res) => {
     const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
     const sgnPrice = sgnPriceDoc?.price || 0.00;
 
+    // ====================== ROI TOKENS → USD CONVERSION ======================
+    const roiTokens = user.wallets?.roi?.amount || 0;
+    const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
+
+    const referralEarningsUsd = user.wallets?.referral?.amount || user.referralEarnings || 0;
+
+    // Total Earnings in USD (Correct Calculation)
+    const totalEarningsUsd = parseFloat((referralEarningsUsd + roiEarningsUsd).toFixed(2));
+
     // ====================== RECENT 5 INVESTMENTS ======================
     const recentInvestments = await Investment.find({ userId: user.userId })
       .sort({ createdAt: -1 })
@@ -136,15 +145,15 @@ const getDashboard = async (req, res) => {
           },
           {
             title: "TOTAL EARNINGS",
-            value: `$${(user.totalEarnings || 0).toFixed(2)}`,
+            value: `$${totalEarningsUsd.toFixed(2)}`,           // ← Corrected
           },
           {
             title: "REFERRAL EARNINGS",
-            value: `$${(user.wallets?.referral?.amount || user.referralEarnings || 0).toFixed(2)}`,
+            value: `$${referralEarningsUsd.toFixed(2)}`,
           },
           {
             title: "ROI EARNINGS",
-            value: `$${(user.wallets?.roi?.amount || 0).toFixed(2)}`,
+            value: `$${roiEarningsUsd.toFixed(2)}`,             // ← Now in USD
           },
           {
             title: "ACTIVE PACKAGE",
@@ -158,15 +167,15 @@ const getDashboard = async (req, res) => {
 
         profitTracker: {
           totalInvested: user.totalInvested || 0,
-          totalEarnings: user.totalEarnings || 0,
+          totalEarnings: totalEarningsUsd,                     // ← Corrected
           dailyIncome: user.dailyIncome || 0,
-          roiBalance: user.wallets?.roi?.amount || 0,
-          referralBalance: user.wallets?.referral?.amount || 0,
+          roiBalance: roiTokens,                          // ← USD value
+          referralBalance: referralEarningsUsd,
         },
 
         teamStats: {
           totalReferrals: directReferrals,
-          referralEarnings: user.wallets?.referral?.amount || user.referralEarnings || 0,
+          referralEarnings: referralEarningsUsd,
         },
 
         // 🔥 Latest 5 Investments
