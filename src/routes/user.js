@@ -4,18 +4,12 @@ const router = express.Router();
 const {  getMe,webRegisterOrLogin } = require("../controllers/userControllers/auth1");
 
 const {
-  getUserStakedPlans,
-  getAllPackageDetails,
   requestWithdrawalOtp,
   withdraw,
   getWithdrawalHistory,
   getDashboard,
   getWalletDetails,
-  getInvestments,
-  swapDepositToToken,
-  getSwaps,
   getDailyROI,
-  getTransactionHistory,
   getUserProfile,
 updateUserProfilePassword,
   getReferralIncome,
@@ -57,12 +51,6 @@ router.options("/contactformmail", (req, res) => {
   res.sendStatus(200);
 });
 
-// router.post("/auth/signup", signup);
-// router.post("/auth/verify-otp", verifySignupOTP);
-// router.post("/auth/login", login);
-// router.post("/auth/forgot-password", forgotPassword);
-// router.post("/auth/reset-password", resetPassword);
-// router.post("/auth/resend-otp", resendOTP);
 
 // 🔥 Telegram Login
 // router.post("/telegram-login", telegramLogin);
@@ -95,13 +83,6 @@ router.get(
   getWithdrawalHistory
 );
 
-//Stake
-router.get("/stake/userPlans", authMiddleware(["user"]), getUserStakedPlans);
-router.get(
-  "/package/allDetails",
-  authMiddleware(["user"]),
-  getAllPackageDetails
-);
 
 // Sidebar Menu Routes (Requires Authentication)
 router.get("/dashboard", authMiddleware(["user"]), getDashboard);
@@ -111,9 +92,7 @@ router.get("/wallet", authMiddleware(["user"]), getWalletDetails);
 router.post('/plan/invest', authMiddleware(["user"]), investInPlan);
 router.get('/investments', authMiddleware(["user"]), getUserInvestments);
 router.get('/overview', authMiddleware(["user"]), getUserOverview);
-// Swap Routes (User)
-router.post("/swap/deposit-to-token", authMiddleware(["user"]), swapDepositToToken);
-router.get("/swaps", authMiddleware(["user"]), getSwaps);
+
 
 //KYC Route
 router.post("/submit-kyc", authMiddleware(["user"]), submitKYC);
@@ -152,15 +131,6 @@ router.get("/daily-roi", authMiddleware(["user"]), getDailyROI);
 router.get("/referral-income", authMiddleware(["user"]), getReferralIncome);
 router.get("/level-wise-income", authMiddleware(["user"]), getLevelWiseIncome);
 
-
-
-
-
-router.get(
-  "/transaction-history",
-  authMiddleware(["user"]),
-  getTransactionHistory
-);
 
 // router.get("/profile", authMiddleware(["user"]), getUserProfile);
 router.put("/profile/update-user-password", authMiddleware(["user"]), updateUserProfilePassword);

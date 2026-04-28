@@ -2,21 +2,14 @@ const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const User = require("../../models/User");
 const Admin = require("../../models/Admin");
-const Package = require("../../models/Package");
 const Deposit = require("../../models/Deposit");
 const Price = require("../../models/Price");
 const Withdrawal = require("../../models/Withdrawal");
-const Stake = require("../../models/Stake");
 const RoiDistribution = require("../../models/RoiDistribution");
 const Referral = require("../../models/Referral");
-const ReferralReward = require("../../models/Referral");
-const LevelReward = require("../../models/LevelIncome");
 const KYC = require("../../models/KYC");
-const Swap = require("../../models/Swap");
 const crypto = require("crypto");
 const { ethers, parseUnits } = require("ethers");
-const TransferTransaction = require("../../models/TransferTransaction");
-const ReinvestTransaction = require("../../models/ReinvestTransaction");
 const { sendEmail, sendSupportEmails } = require("../../services/emailService");
 const {
   verifyTransactionHash,
@@ -73,7 +66,7 @@ const calculateDownlineUsers = async (referralCode) => {
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome activePackage isActive wallets"
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncomeisActive wallets"
     );
 
     if (!user) {
@@ -201,66 +194,6 @@ const getDashboard = async (req, res) => {
   }
 };
 
-
-const getUserStakedPlans = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
-    // Fetch all stakes for the user
-    const stakes = await Stake.find({ userId: user._id })
-      .populate("package", "name investment lockingPeriodDays")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const stakedPlans = stakes
-      .filter((stake) => stake.package)
-      .map((stake) => {
-        const lockingPeriodEnd = moment(stake.packageEndDate);
-        const isLockingPeriodActive = moment().isBefore(lockingPeriodEnd);
-        return {
-          stakeId: stake.stakeId,
-          amount: stake.amount,
-          packageName: stake.package.name,
-          investment: stake.package.investment,
-          dailyROI: stake.dailyROI || 0,
-          dailyROIAmount: stake.dailyROIAmount || 0,
-          lockingPeriodDays: stake.package.lockingPeriodDays,
-          createdAt: stake.createdAt,
-          startDate: stake.packageStartDate,
-          lockUntil: lockingPeriodEnd.toDate(),
-          isLockingPeriodActive,
-          status: stake.status,
-          isSwapped: stake.isSwapped || false,
-          isReinvested: stake.isReinvested || false,
-          isTransferred: stake.isTransferredToPrincipalWallet || false,
-        };
-      });
-    res.status(200).json(
-      successResponse("Staked plans retrieved successfully", {
-        stakedPlans,
-        totalStakedAmount: stakedPlans.reduce(
-          (sum, plan) => sum + plan.amount,
-          0,
-        ),
-        totalStakes: stakedPlans.length,
-      }),
-    );
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-// Get All Package Details
-const getAllPackageDetails = async (req, res) => {
-  try {
-    const packages = await Package.find().sort({ investment: 1 }).lean();
-
-    res.status(200).json(successResponse("All packages retrieved", packages));
-  } catch (error) {
-    console.error("Error fetching all package details:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
 
 const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
   try {
@@ -885,18 +818,6 @@ const getReport = async (req, res) => {
           createdAt: -1,
         });
         break;
-      case "swap":
-        transactions = await Swap.find({ userId: user._id }).sort({
-          createdAt: -1,
-        });
-        break;
-      case "referral":
-        transactions = await ReferralReward.find({ referrerId: user._id }).sort(
-          {
-            createdAt: -1,
-          },
-        );
-        break;
       case "bonanza":
         transactions = [];
         break;
@@ -936,110 +857,7 @@ const getWalletDetails = async (req, res) => {
   }
 };
 
-const getInvestments = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).populate("package");
-    if (!user) return res.status(404).json(errorResponse("User not found"));
 
-    const teamInvestment = await calculateDownlineInvestment(user.referralCode);
-
-    const investments = user.package ? [user.package] : [];
-    res.status(200).json(
-      successResponse("Investments retrieved", {
-        selfInvestment: user.totalSelfInvestment, // Use totalSelfInvestment
-        teamInvestment, // Use updated downline investment
-        investments,
-      }),
-    );
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const swapDepositToToken = async (req, res) => {
-  try {
-    const { amount } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json(errorResponse("Invalid amount"));
-    }
-
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json(errorResponse("User not found"));
-    }
-
-    // Check sufficient balance in depositWallet
-    if (user.depositWallet.amount < amount) {
-      return res
-        .status(400)
-        .json(errorResponse("Insufficient balance in deposit wallet"));
-    }
-
-    // Deduct from depositWallet
-    user.depositWallet.amount -= amount;
-
-    // Convert to token (assuming 1:1 conversion rate for simplicity; adjust if needed)
-    const tokenPrice = await Price.findOne({ currencyType: "URWA" });
-    if (!tokenPrice) {
-      return res.status(500).json(errorResponse("Token price not available"));
-    }
-
-    const swapFeePercentage = 0.02;
-    const swapFee = amount * swapFeePercentage;
-    const netUsdtAmount = amount - swapFee;
-    const tokenAmount = netUsdtAmount / tokenPrice.price; // Or apply conversion: amount * conversionRate
-
-    // Add to emgtWallet (assuming it's the token wallet)
-    user.emgtWallet.amount += tokenAmount;
-
-    await user.save();
-
-    const swap = new Swap({
-      userId: user._id,
-      user_id: user.user_id,
-      usdtAmount: amount,
-      emgtAmount: tokenAmount,
-      tokenPrice: tokenPrice.price,
-      swapFee: swapFee,
-      walletType: "deposit",
-      status: "completed",
-      swapDetails: { originalAmount: amount, fee: swapFee, tokenAmount },
-    });
-    await swap.save();
-
-    res.status(200).json(
-      successResponse("Deposit swapped to token successfully", {
-        swappedAmount: amount,
-        tokenAmount,
-        newDepositBalance: user.depositWallet.amount,
-        newEmgtBalance: user.emgtWallet.amount,
-      }),
-    );
-  } catch (error) {
-    console.error("Error in swapDepositToToken:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const getSwaps = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    // Fetch swaps with population and sorting
-    const swaps = await Swap.find({ userId: user._id })
-      .populate("userId", "email") // Populate user email for reference
-      .sort({ createdAt: -1 }) // Sort by creation date, newest first
-      .lean();
-
-    res
-      .status(200)
-      .json(successResponse("Swaps retrieved successfully", swaps));
-  } catch (error) {
-    console.error("Error fetching swaps:", error);
-    res
-      .status(500)
-      .json(errorResponse("An error occurred while fetching swaps"));
-  }
-};
 
 // Referral data
 
@@ -1080,7 +898,6 @@ const getReferralData = async (req, res) => {
         lastName: user.last_name,
         email: user.email,
         level: lvl, // ✅ Level is now correctly set
-        plan: user.package?.name,
         joinDate: user.createdAt,
         selfInvestment: user.totalSelfInvestment || 0,
         leftTeamInvestment: user.leftLegInvestment || 0,
@@ -1848,40 +1665,6 @@ const getReferralIncome = async (req, res) => {
 };
 
 
-
-const getTransactionHistory = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
-
-    const deposits = await Deposit.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const withdrawals = await Withdrawal.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const swaps = await Swap.find({ userId: user._id }).sort({ createdAt: -1 });
-    const stakes = await Stake.find({ userId: user._id }).sort({
-      createdAt: -1,
-    });
-    const transactions = [
-      ...deposits,
-      ...withdrawals,
-      ...swaps,
-      ...stakes,
-    ].sort((a, b) => b.createdAt - a.createdAt);
-
-    res.status(200).json(
-      successResponse("Transaction history retrieved", {
-        selfInvestment: user.totalSelfInvestment, // Use totalSelfInvestment
-        teamInvestment: await calculateDownlineInvestment(user.referralCode), // Use updated downline investment
-        transactions,
-      }),
-    );
-  } catch (error) {
-    res.status(500).json(errorResponse(error.message));
-  }
-};
 
 const getUserProfile = async (req, res) => {
   try {
@@ -2739,19 +2522,13 @@ const addWalletFirstTime = async (req, res) => {
 
 
 module.exports = {
-  getUserStakedPlans,
-  getAllPackageDetails,
   requestWithdrawalOtp,
   withdraw,
   getWithdrawalHistory,
   getDashboard,
   getWalletDetails,
-  getInvestments,
-  swapDepositToToken,
-  getSwaps,
   getDailyROI,
   getReferralIncome,
-  getTransactionHistory,
   getUserProfile,
   updateUserProfilePassword,
   getReport,
