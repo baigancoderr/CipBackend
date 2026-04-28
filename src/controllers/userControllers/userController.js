@@ -8,7 +8,7 @@ const Price = require("../../models/Price");
 const Withdrawal = require("../../models/Withdrawal");
 const Stake = require("../../models/Stake");
 const RoiDistribution = require("../../models/RoiDistribution");
-const LevelPlan = require("../../models/LevelPlan");
+const Referral = require("../../models/Referral");
 const ReferralReward = require("../../models/Referral");
 const LevelReward = require("../../models/LevelIncome");
 const KYC = require("../../models/KYC");
@@ -1501,89 +1501,6 @@ const getLevelWiseIncome = async (req, res) => {
   }
 };
 
-// Get Direct Team API
-// const getDirectTeam = async (req, res) => {
-//   try {
-//     const { startDate, endDate, page = 1, limit = 10, level } = req.query;
-//     const user = await User.findById(req.user.id).select(
-//       "referralCode totalSelfInvestment",
-//     );
-//     if (!user) {
-//       return res.status(404).json(errorResponse("User not found"));
-//     }
-
-//     // Validate level parameter (direct team is typically level 1)
-//     const targetLevel = level ? parseInt(level, 10) : 1;
-//     if (targetLevel !== 1) {
-//       return res
-//         .status(400)
-//         .json(errorResponse("Direct team is only available for level 1"));
-//     }
-
-//     // Build query for direct referrals
-//     const query = { referredBy: user.referralCode };
-//     if (startDate || endDate) {
-//       query.createdAt = {};
-//       if (startDate)
-//         query.createdAt.$gte = moment(startDate).startOf("day").toDate();
-//       if (endDate) query.createdAt.$lte = moment(endDate).endOf("day").toDate();
-//     }
-
-//     // Calculate pagination
-//     const pageNum = parseInt(page, 10);
-//     const limitNum = parseInt(limit, 10);
-//     const skip = (pageNum - 1) * limitNum;
-
-//     // Fetch direct referrals with pagination
-//     const directReferrals = await User.find(query)
-//       .populate("package", "name investment")
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(limitNum)
-//       .lean();
-
-//     // Fetch total count for pagination
-//     const totalDirectReferrals = await User.countDocuments(query);
-
-//     // Map direct referrals to include additional details
-//     const directTeam = await Promise.all(
-//       directReferrals.map(async (u, index) => {
-//         const teamInvestment = await calculateDownlineInvestment(
-//           u.referralCode,
-//         );
-//         return {
-//           sr: skip + index + 1, // Serial number for pagination
-//           id: u._id,
-//           userName: u.username || u.email.split("@")[0],
-//           email: u.email,
-//           level: 1, // Direct referrals are always level 1
-//           plan: u.package?.name || "N/A",
-//           selfInvestment: u.totalSelfInvestment || 0,
-//           teamInvestment,
-//           joinDate: u.createdAt,
-//         };
-//       }),
-//     );
-
-//     res.status(200).json(
-//       successResponse("Direct team retrieved successfully", {
-//         selfInvestment: user.totalSelfInvestment || 0,
-//         directTeam,
-//         pagination: {
-//           total: totalDirectReferrals,
-//           page: pageNum,
-//           limit: limitNum,
-//           totalPages: Math.ceil(totalDirectReferrals / limitNum),
-//         },
-//       }),
-//     );
-//   } catch (error) {
-//     console.error("Error fetching direct team:", error);
-//     res.status(500).json(errorResponse(error.message));
-//   }
-// };
-
-
 const getDirectTeam = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
@@ -1654,147 +1571,6 @@ const getDirectTeam = async (req, res) => {
   }
 };
 
-// Get Indirect Team API
-// const getIndirectTeam = async (req, res) => {
-//   try {
-//     const { startDate, endDate, page = 1, limit = 10, level } = req.query;
-//     const user = await User.findById(req.user.id).select(
-//       "referralCode totalSelfInvestment",
-//     );
-//     if (!user) {
-//       return res.status(404).json(errorResponse("User not found"));
-//     }
-
-//     // Fetch direct referrals to start building the indirect team
-//     const directReferrals = await User.find({ referredBy: user.referralCode })
-//       .select("referralCode")
-//       .lean();
-
-//     if (!directReferrals.length) {
-//       return res.status(404).json(errorResponse("No direct referrals found"));
-//     }
-
-//     // Recursive function to fetch indirect team
-//     const getIndirectTeamRecursively = async (
-//       referralCodes,
-//       currentLevel = 1,
-//       levelData = {},
-//     ) => {
-//       if (!referralCodes.length) return levelData;
-
-//       const users = await User.find({
-//         referredBy: { $in: referralCodes },
-//       })
-//         .populate("package", "name investment")
-//         .lean();
-
-//       if (!users.length) return levelData;
-
-//       if (!levelData[currentLevel]) {
-//         levelData[currentLevel] = [];
-//       }
-
-//       const nextLevelReferralCodes = [];
-//       for (const u of users) {
-//         levelData[currentLevel].push({
-//           id: u._id,
-//           userName: u.username || u.email.split("@")[0],
-//           email: u.email,
-//           plan: u.package?.name || "N/A",
-//           selfInvestment: u.totalSelfInvestment || 0,
-//           teamInvestment: await calculateDownlineInvestment(u.referralCode),
-//           joinDate: u.createdAt,
-//         });
-//         nextLevelReferralCodes.push(u.referralCode);
-//       }
-
-//       // Recursively fetch next level
-//       await getIndirectTeamRecursively(
-//         nextLevelReferralCodes,
-//         currentLevel + 1,
-//         levelData,
-//       );
-//       return levelData;
-//     };
-
-//     // Fetch indirect team data
-//     let indirectTeamData = await getIndirectTeamRecursively(
-//       directReferrals.map((u) => u.referralCode),
-//       1,
-//     );
-
-//     // Filter by specific level if provided
-//     if (level) {
-//       const targetLevel = parseInt(level, 10);
-//       if (targetLevel < 1) {
-//         return res.status(400).json(errorResponse("Level must be at least 1"));
-//       }
-//       indirectTeamData = { [targetLevel]: indirectTeamData[targetLevel] || [] };
-//     }
-
-//     // Apply date filtering
-//     if (startDate || endDate) {
-//       const start = startDate
-//         ? moment(startDate).startOf("day").toDate()
-//         : null;
-//       const end = endDate ? moment(endDate).endOf("day").toDate() : null;
-//       for (const lvl in indirectTeamData) {
-//         indirectTeamData[lvl] = indirectTeamData[lvl].filter((user) => {
-//           const joinDate = new Date(user.joinDate);
-//           return (!start || joinDate >= start) && (!end || joinDate <= end);
-//         });
-//       }
-//     }
-
-//     // Apply pagination
-//     const pageNum = parseInt(page, 10);
-//     const limitNum = parseInt(limit, 10);
-//     const skip = (pageNum - 1) * limitNum;
-
-//     // Flatten data for pagination
-//     const allIndirectUsers = Object.values(indirectTeamData)
-//       .flat()
-//       .sort((a, b) => new Date(b.joinDate) - new Date(a.joinDate));
-
-//     const totalIndirectUsers = allIndirectUsers.length;
-//     const paginatedIndirectUsers = allIndirectUsers.slice(
-//       skip,
-//       skip + limitNum,
-//     );
-
-//     // Add serial numbers
-//     const indirectTeam = paginatedIndirectUsers.map((user, index) => ({
-//       sr: skip + index + 1,
-//       ...user,
-//     }));
-
-//     // Calculate total team investment
-//     const teamInvestment = await calculateDownlineInvestment(user.referralCode);
-
-//     if (!indirectTeam.length) {
-//       return res
-//         .status(404)
-//         .json(errorResponse("No indirect team members found"));
-//     }
-
-//     res.status(200).json(
-//       successResponse("Indirect team retrieved successfully", {
-//         selfInvestment: user.totalSelfInvestment || 0,
-//         teamInvestment,
-//         indirectTeam,
-//         pagination: {
-//           total: totalIndirectUsers,
-//           page: pageNum,
-//           limit: limitNum,
-//           totalPages: Math.ceil(totalIndirectUsers / limitNum),
-//         },
-//       }),
-//     );
-//   } catch (error) {
-//     console.error("Error fetching indirect team:", error);
-//     res.status(500).json(errorResponse(error.message));
-//   }
-// };
 
 const getIndirectTeam = async (req, res) => {
   try {
@@ -1927,41 +1703,51 @@ const getIndirectTeam = async (req, res) => {
 const getDailyROI = async (req, res) => {
   try {
     const { startDate, endDate, page = 1, limit = 10 } = req.query;
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
 
-    // Build query for ROI distributions
-    const query = { userId: user._id };
-    if (startDate || endDate) {
-      query.distributionDate = {};
-      if (startDate)
-        query.distributionDate.$gte = moment(startDate).startOf("day").toDate();
-      if (endDate)
-        query.distributionDate.$lte = moment(endDate).endOf("day").toDate();
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json(errorResponse("User not found"));
     }
 
+    // Build query for ROI distributions
+    const query = { userId: user._id }; // ← New schema mein userId (ObjectId) use kar rahe hain
+
+    if (startDate || endDate) {
+      query.distributionDate = {};
+      if (startDate) {
+        query.distributionDate.$gte = moment(startDate).startOf("day").toDate();
+      }
+      if (endDate) {
+        query.distributionDate.$lte = moment(endDate).endOf("day").toDate();
+      }
+    }
+
+    // Total count for pagination
     const total = await RoiDistribution.countDocuments(query);
+
+    // Fetch distributions
     const distributions = await RoiDistribution.find(query)
       .sort({ distributionDate: -1 })
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
+    // Format data according to new schema
     const formattedData = distributions.map((dist, index) => ({
       sr: (page - 1) * limit + index + 1,
-      planName: dist.planName,
-      stakeId: dist.stakeId,
-      amount: dist.amount,
-      dailyROI: dist.dailyROI,
-      dailyROIPercentage: dist.dailyROIPercentage,
+      investmentId: dist.investmentId,
+      amount: dist.amount,                    // daily ROI tokens
+      totalTokens: dist.totalTokens,          // total tokens from this investment
+      dailyROI: dist.dailyROI,                // daily ROI percentage
       stakeAmount: dist.stakeAmount,
       distributionDate: dist.distributionDate,
     }));
 
-    // Calculate total team investment
+    // Calculate total team investment (old logic rakha hai)
     const teamInvestment = await calculateDownlineInvestment(user.referralCode);
 
     res.status(200).json(
-      successResponse("Daily ROI data retrieved", {
+      successResponse("Daily ROI data retrieved successfully", {
         selfInvestment: user.totalSelfInvestment || 0,
         teamInvestment,
         data: formattedData,
@@ -1971,7 +1757,7 @@ const getDailyROI = async (req, res) => {
           limit: parseInt(limit),
           totalPages: Math.ceil(total / limit),
         },
-      }),
+      })
     );
   } catch (error) {
     console.error("Error fetching daily ROI:", error);
@@ -1984,21 +1770,21 @@ const getReferralIncome = async (req, res) => {
     const { startDate, endDate, page = 1, limit = 10, status } = req.query;
 
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json(errorResponse("User not found"));
+    if (!user) {
+      return res.status(404).json(errorResponse("User not found"));
+    }
 
     // Build query
     const query = { userId: user._id };
 
-    // Status filter (default: completed)
     if (status) {
       query.status = status;
     } else {
-      query.status = "completed"; // keep your original default
+      query.status = "completed";
     }
 
-    // Date filter
     if (startDate || endDate) {
-      query.createdAt = {}; // or distributionDate if your model has it
+      query.createdAt = {};
       if (startDate) {
         query.createdAt.$gte = moment(startDate).startOf("day").toDate();
       }
@@ -2007,192 +1793,61 @@ const getReferralIncome = async (req, res) => {
       }
     }
 
+    console.log("🔍 Referral Query:", JSON.stringify(query)); // ← Debugging
+
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Fetch paginated records
-    const referrals = await ReferralReward.find(query)
+    // Fetch data
+    const referrals = await Referral.find(query)          // ← Changed to Referral
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
       .lean();
 
-    // Total Referral Income (sum of filtered records)
-    const totalReferralIncome = await ReferralReward.aggregate([
+    // Total income
+    const totalReferralIncome = await Referral.aggregate([   // ← Changed to Referral
       { $match: query },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]).then((res) => res[0]?.total || 0);
 
-    // Total records for pagination
-    const totalRecords = await ReferralReward.countDocuments(query);
-    const totalPages = Math.ceil(totalRecords / Number(limit));
+    // Total records
+    const totalRecords = await Referral.countDocuments(query);  // ← Changed to Referral
 
-    // Add serial number (global per page)
+    console.log(`📊 Found ${totalRecords} referral records for user ${user.userId}`);
+
     const formattedReferrals = referrals.map((ref, index) => ({
       sr: skip + index + 1,
-      ...ref,
+      level: ref.level,
+      referredId: ref.referredId,
+      investmentAmount: ref.investmentAmount,
+      commissionAmount: ref.amount,
+      status: ref.status,
+      investmentId: ref.investmentId,
+      date: ref.createdAt,
     }));
 
     res.status(200).json(
       successResponse("Referral income retrieved successfully", {
         selfInvestment: user.totalSelfInvestment || 0,
-        teamInvestment: await calculateDownlineInvestment(user.referralCode),
-        referralCount: totalRecords, // Total across all pages
-        totalReferralIncome,
+        teamInvestment: await calculateDownlineInvestment(user.referralCode).catch(() => 0),
+        referralCount: totalRecords,
+        totalReferralIncome: parseFloat(totalReferralIncome.toFixed(2)),
         referrals: formattedReferrals,
-        pagination: {
-          total: totalRecords,
-          page: Number(page),
-          limit: Number(limit),
-          totalPages,
-        },
-      }),
-    );
-  } catch (error) {
-    console.error("Error fetching referral income:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
-
-const getLevelIncomeReward = async (req, res) => {
-  try {
-    const { startDate, endDate, page = 1, limit = 10 } = req.query;
-
-    const user = await User.findById(req.user.id).select(
-      "totalSelfInvestment referralCode email name",
-    );
-    if (!user || !user.email) {
-      return res
-        .status(404)
-        .json(errorResponse("User not found or email not available"));
-    }
-
-    // Build query
-    const query = { userId: user._id };
-    if (startDate || endDate) {
-      query.distributionDate = {};
-      if (startDate)
-        query.distributionDate.$gte = moment(startDate).startOf("day").toDate();
-      if (endDate)
-        query.distributionDate.$lte = moment(endDate).endOf("day").toDate();
-    }
-
-    // Fetch all records for this user (with date filter)
-    const rewards = await LevelReward.find(query)
-      .sort({ distributionDate: -1 })
-      .lean();
-
-    // Group by date
-    const dailyRewards = rewards.reduce((acc, reward) => {
-      const date = moment(reward.distributionDate).format("YYYY-MM-DD");
-      if (!acc[date]) {
-        acc[date] = { totalRewardAmount: 0, records: [] };
-      }
-      acc[date].totalRewardAmount += reward.amount || 0;
-      acc[date].records.push({
-        level: reward.level,
-        rank: `Level ${reward.level}`,
-        investmentAmount: reward.investmentAmount,
-        rewardAmount: reward.amount,
-        fromUserId: reward.fromUserId,
-        user_id: reward.user_id,
-        distributionDate: reward.distributionDate,
-      });
-      return acc;
-    }, {});
-
-    // Flatten all records with global SR
-    const sortedDates = Object.keys(dailyRewards).sort((a, b) =>
-      b.localeCompare(a),
-    ); // newest first
-
-    let allFlatRecords = [];
-    let globalSrCounter = 1;
-
-    sortedDates.forEach((date) => {
-      dailyRewards[date].records.forEach((record) => {
-        allFlatRecords.push({
-          date,
-          sr: globalSrCounter++,
-          ...record,
-        });
-      });
-    });
-
-    // === Pagination ===
-    const totalRecords = allFlatRecords.length;
-    const skip = (Number(page) - 1) * Number(limit);
-    const paginatedFlatRecords = allFlatRecords.slice(
-      skip,
-      skip + Number(limit),
-    );
-
-    // Re-group only paginated records back by date
-    const paginatedDaily = paginatedFlatRecords.reduce((acc, item) => {
-      const date = item.date;
-      if (!acc[date]) {
-        acc[date] = { totalRewardAmount: 0, records: [] };
-      }
-      acc[date].totalRewardAmount += item.rewardAmount || 0;
-      acc[date].records.push({
-        sr: item.sr,
-        level: item.level,
-        rank: item.rank,
-        investmentAmount: item.investmentAmount,
-        rewardAmount: item.rewardAmount,
-        fromUserId: item.fromUserId,
-        user_id: item.user_id,
-        distributionDate: item.distributionDate,
-      });
-      return acc;
-    }, {});
-
-    // Final formatted data (grouped by date)
-    const formattedData = Object.keys(paginatedDaily).reduce((acc, date) => {
-      acc[date] = {
-        totalRewardAmount: paginatedDaily[date].totalRewardAmount,
-        recordCount: paginatedDaily[date].records.length,
-        records: paginatedDaily[date].records,
-      };
-      return acc;
-    }, {});
-
-    // Calculate team investment
-    const teamInvestment = await calculateDownlineInvestment(user.referralCode);
-
-    // Level Plan mapping
-    const levelPlans = await LevelPlan.find().lean();
-    const levelPlanMap = levelPlans.reduce((map, plan) => {
-      map[plan.name] = plan;
-      return map;
-    }, {});
-
-    // Add level plan details
-    Object.keys(formattedData).forEach((date) => {
-      formattedData[date].records = formattedData[date].records.map(
-        (record) => ({
-          ...record,
-        }),
-      );
-    });
-
-    res.status(200).json(
-      successResponse("Level income rewards retrieved", {
-        selfInvestment: user.totalSelfInvestment || 0,
-        teamInvestment,
-        data: formattedData,
         pagination: {
           total: totalRecords,
           page: Number(page),
           limit: Number(limit),
           totalPages: Math.ceil(totalRecords / Number(limit)),
         },
-      }),
+      })
     );
   } catch (error) {
-    console.error("Error fetching level income rewards:", error);
+    console.error("❌ Error fetching referral income:", error);
     res.status(500).json(errorResponse(error.message));
   }
 };
+
+
 
 const getTransactionHistory = async (req, res) => {
   try {
@@ -2385,48 +2040,7 @@ const updateUserProfilePassword = async (req, res) => {
   }
 };
 
-// Get All Level Plans
-const getAllLevelPlans = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
 
-    if (page < 1 || limit < 1) {
-      return res
-        .status(400)
-        .json(errorResponse("Page and limit must be positive integers"));
-    }
-
-    const skip = (page - 1) * limit;
-
-    const levelPlans = await LevelPlan.find()
-      .sort({ roi: 1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const total = await LevelPlan.countDocuments();
-
-    if (!levelPlans.length) {
-      return res.status(404).json(errorResponse("No level plans found"));
-    }
-
-    res.status(200).json(
-      successResponse("All level plans retrieved successfully", {
-        levelPlans,
-        pagination: {
-          total,
-          page,
-          limit,
-          pages: Math.ceil(total / limit),
-        },
-      }),
-    );
-  } catch (error) {
-    console.error("Error fetching all level plans:", error);
-    res.status(500).json(errorResponse(error.message));
-  }
-};
 
 const sendSupportEmail = async (req, res) => {
   try {
@@ -3136,7 +2750,6 @@ module.exports = {
   swapDepositToToken,
   getSwaps,
   getDailyROI,
-  getLevelIncomeReward,
   getReferralIncome,
   getTransactionHistory,
   getUserProfile,
@@ -3151,7 +2764,6 @@ module.exports = {
   getDirectTeam,
   getIndirectTeam,
 
-  getAllLevelPlans,
 
   sendSupportEmail,
   contactFormEmail,

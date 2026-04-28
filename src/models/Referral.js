@@ -9,6 +9,11 @@ const referralSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    investmentId: {
+      type: String,
+      ref: "Investment",
+      required: true,
+    },
     referrerId: { type: String, ref: "User", required: true },
     referredId: { type: String, ref: "User", required: true },
     level: { type: Number, required: true },

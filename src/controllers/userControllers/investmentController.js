@@ -90,7 +90,7 @@ const investInPlan = async (req, res) => {
     await distributeReferralIncome(
       user.userId, 
       amount, 
-      "SGN_DIRECT_INVEST",           // productId placeholder (for logging)
+      investmentId,           // productId placeholder (for logging)
       { session }
     );
 
@@ -186,7 +186,64 @@ const getUserInvestments = async (req, res) => {
   }
 };
 
+const getUserOverview = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("userId walletBalance wallets totalInvested");
+
+    if (!user) {
+      return res.status(404).json(errorResponse("User not found"));
+    }
+
+    // Current SGN Price
+    const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
+    const sgnPrice = sgnPriceDoc?.price || 0;
+
+    // Investment summary (total invested, received tokens, claimed tokens)
+    const summary = await Investment.aggregate([
+      { $match: { userId: user.userId } },
+      {
+        $group: {
+          _id: null,
+          totalInvested: { $sum: "$amount" },
+          totalReceivedTokens: { $sum: "$tokensReceived" },
+          totalClaimedTokens: {
+            $sum: { $multiply: ["$claimedDays", "$dailyIncomeTokens"] }
+          }
+        }
+      }
+    ]);
+
+    const stats = summary[0] || {
+      totalInvested: 0,
+      totalReceivedTokens: 0,
+      totalClaimedTokens: 0,
+    };
+
+    res.status(200).json(
+      successResponse("User overview retrieved successfully", {
+        wallets: {
+          mainBalance: parseFloat((user.walletBalance || 0).toFixed(2)),
+          deposit: parseFloat((user.wallets?.deposit?.amount || 0).toFixed(2)),
+          referral: parseFloat((user.wallets?.referral?.amount || 0).toFixed(2)),
+          roi: parseFloat((user.wallets?.roi?.amount || 0).toFixed(8)), // in tokens
+        },
+        investments: {
+          totalInvested: parseFloat(stats.totalInvested.toFixed(2)),
+          totalReceivedTokens: parseFloat(stats.totalReceivedTokens.toFixed(8)),
+          totalClaimedTokens: parseFloat(stats.totalClaimedTokens.toFixed(8)),
+        },
+        currentTokenPrice: sgnPrice,
+        roiInUsd: parseFloat(((user.wallets?.roi?.amount || 0) * sgnPrice).toFixed(2)),
+      })
+    );
+  } catch (error) {
+    console.error("Get User Overview Error:", error);
+    res.status(500).json(errorResponse(error.message));
+  }
+};
+
 module.exports = {
   investInPlan,
   getUserInvestments,
+  getUserOverview,
 };

@@ -54,6 +54,7 @@ async function distributeReferralIncome(investorId, amount, productId, options =
           userId: sponsor._id,
           referrerId: sponsor.userId,
           referredId: investorId,
+          investmentId: productId,
           investmentAmount: amount,
           amount: commissionAmount,
           level: level,

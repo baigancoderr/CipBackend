@@ -52,14 +52,15 @@ async function distributeDailyROI() {
       await RoiDistribution.create({
         userId: user._id,
         user_id: user.userId,
-        investmentId: investment._id,           // reference to this investment
-        amount: dailyTokens,                    // tokens received today
+        investmentId: investment.investmentId,           // reference to this investment
+        amount: investment.amount,                    // tokens received today
+        totalTokens: investment.totalReturn,        // total tokens received from this investment
         dailyROI: investment.dailyIncomeTokens, // for reference
         stakeAmount: investment.amount,         // original investment amount
         date: now,
       });
 
-      console.log(`✅ Daily ROI credited: ${dailyTokens.toFixed(8)} tokens → User ${user.userId} (Investment: ${investment._id})`);
+      console.log(`✅ Daily ROI credited: ${dailyTokens.toFixed(8)} tokens → User ${user.userId} (Investment: ${investment.investmentId })`);
     }
 
     console.log(`[Daily ROI] Distribution completed successfully`);

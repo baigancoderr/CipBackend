@@ -7,7 +7,7 @@ cron.schedule("*/1 * * * *", async () => {
     // cron.schedule("*/2 * * * *", async () => {
   console.log("Running daily ROI distribution cron job...");
   try {
-    // await distributeDailyROI();
+    await distributeDailyROI();
     // await checkBalanceAndProcess();
     // await updateLivePriceInDB();
     console.log("Daily ROI and Binary Income distribution completed.");

@@ -15,11 +15,9 @@ const {
   swapDepositToToken,
   getSwaps,
   getDailyROI,
-  getLevelIncomeReward,
   getTransactionHistory,
   getUserProfile,
 updateUserProfilePassword,
-  getAllLevelPlans,
   getReferralIncome,
   getReferralData,
   getTeamTreeView,
@@ -37,7 +35,7 @@ contactFormEmail,
   getDeposits,
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
-const { investInPlan, getUserInvestments } = require("../controllers/userControllers/investmentController");
+const { investInPlan, getUserInvestments, getUserOverview } = require("../controllers/userControllers/investmentController");
 
 const { createQrDeposit, paymentCallback } = require('../controllers/userControllers/depositController');
 const { submitKYC, getMyKYC, getMyKYCHistory } = require("../controllers/userControllers/kycController");
@@ -112,7 +110,7 @@ router.get("/wallet", authMiddleware(["user"]), getWalletDetails);
 // Property Investment Routes (User)
 router.post('/plan/invest', authMiddleware(["user"]), investInPlan);
 router.get('/investments', authMiddleware(["user"]), getUserInvestments);
-
+router.get('/overview', authMiddleware(["user"]), getUserOverview);
 // Swap Routes (User)
 router.post("/swap/deposit-to-token", authMiddleware(["user"]), swapDepositToToken);
 router.get("/swaps", authMiddleware(["user"]), getSwaps);
@@ -153,13 +151,8 @@ router.get("/indirect-team", authMiddleware(["user"]), getIndirectTeam);
 router.get("/daily-roi", authMiddleware(["user"]), getDailyROI);
 router.get("/referral-income", authMiddleware(["user"]), getReferralIncome);
 router.get("/level-wise-income", authMiddleware(["user"]), getLevelWiseIncome);
-router.get(
-  "/level-income-reward",
-  authMiddleware(["user"]),
-  getLevelIncomeReward
-);
 
-router.get("/level-plans", authMiddleware(["user"]), getAllLevelPlans);
+
 
 
 
