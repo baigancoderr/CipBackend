@@ -241,6 +241,7 @@ const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
   }
 };
 
+
 const requestWithdrawalOtp = async (req, res) => {
   const { walletType, amount, currencyType } = req.body;
 
@@ -265,7 +266,7 @@ const requestWithdrawalOtp = async (req, res) => {
     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT || 1;
     if (amount < MIN_WITHDRAWAL_AMOUNT) {
       throw new Error(
-        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
+        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`
       );
     }
 
@@ -273,7 +274,7 @@ const requestWithdrawalOtp = async (req, res) => {
       ? config.TRANSACTION_CHARGE || 10
       : 0;
     const adminDeduction = Number(
-      ((amount * TRANSACTION_CHARGE) / 100).toFixed(4),
+      ((amount * TRANSACTION_CHARGE) / 100).toFixed(4)
     );
     const netAmount = Number((amount - adminDeduction).toFixed(2));
     if (netAmount <= 0)
@@ -297,7 +298,7 @@ const requestWithdrawalOtp = async (req, res) => {
         walletAddress,
         otp,
       }),
-      { EX: 600 }, // 10-minute TTL
+      { EX: 600 } // 10-minute TTL
     );
 
     const email = user.email;
@@ -322,455 +323,337 @@ const requestWithdrawalOtp = async (req, res) => {
   }
 };
 
-
-
-
-
-
-// const withdraw = async (req, res) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-
-//   let withdrawal = null;
-//   let adminDeduction = 0;
-
-//   try {
-//     const { walletType, amount, currencyType = "USDT", otp } = req.body;
-//     const userId = req.user.id;
-
-//     const user = await User.findById(userId).session(session);
-
-//     if (!user) {
-//       throw new Error("User not found");
-//     }
-
-//     // Validate OTP
-//     await verifyOTP(user.email, otp, "withdrawal");
-//     logger.info(`OTP verified for user ${userId} for withdrawal request.`);
-
-//     // Check if wallet address is not set or is "NA"
-//     if (!user.walletAddress || user.walletAddress === "NA") {
-//       throw new Error("Set wallet address first");
-//     }
-
-//     // Validate amount
-//     if (!amount || amount <= 0) {
-//       throw new Error("Invalid withdrawal amount");
-//     }
-
-//     // Minimum withdrawal amount (e.g., $1)
-//     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
-//     if (amount < MIN_WITHDRAWAL_AMOUNT) {
-//       throw new Error(
-//         `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
-//       );
-//     }
-
-//     // Wallet mapping
-//     const walletMap = {
-//       principal: "principalWallet",
-//       my: "myWallet",
-//       deposit: "depositWallet",
-//       referral: "referralWallet",
-//     };
-
-//     if (!walletMap[walletType]) {
-//       throw new Error("Invalid wallet type");
-//     }
-
-//     // Determine the wallet field and check balance
-//     const walletObj = walletMap[walletType];
-//     const wallet = user[walletObj];
-//     if (!wallet || wallet.amount < amount) {
-//       throw new Error(
-//         `Insufficient funds in ${
-//           walletType.charAt(0).toUpperCase() + walletType.slice(1)
-//         } Wallet`,
-//       );
-//     }
-
-//     // Apply transaction charge: 10% for my and referral wallets, 0% for others
-//     const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
-//       ? config.TRANSACTION_CHARGE || 10
-//       : 0;
-//     adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
-//     const netAmount = Number((amount - adminDeduction).toFixed(2));
-
-//     // Ensure netAmount is positive
-//     if (netAmount <= 0) {
-//       throw new Error(
-//         "Net withdrawal amount after charges must be greater than 0",
-//       );
-//     }
-
-//     // Deduct the full amount from the user's wallet
-//     user[walletObj].amount = Number((wallet.amount - amount).toFixed(2));
-
-//     // Update admin's transactionFeeCollected if a fee was applied
-//     if (adminDeduction > 0) {
-//       const adminCacheKey = `admin:admin123`;
-//       let admin;
-//       const cachedAdmin = await redisClient.get(adminCacheKey).catch((err) => {
-//         console.warn(`Redis get error for ${adminCacheKey}:`, err.message);
-//         return null;
-//       });
-
-//       if (cachedAdmin) {
-//         admin = JSON.parse(cachedAdmin);
-//       } else {
-//         admin = await Admin.findOne({ referralCode: "admin123" }).session(
-//           session,
-//         );
-//         if (admin) {
-//           await redisClient
-//             .set(adminCacheKey, JSON.stringify(admin), "EX", 3600)
-//             .catch((err) => {
-//               console.warn(
-//                 `Redis set error for ${adminCacheKey}:`,
-//                 err.message,
-//               );
-//             });
-//         }
-//       }
-
-//       if (admin) {
-//         admin.transactionFeeCollected = Number(
-//           ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2),
-//         );
-//         await Admin.updateOne(
-//           { referralCode: "admin123" },
-//           { transactionFeeCollected: admin.transactionFeeCollected },
-//           { session },
-//         );
-//       } else {
-//         console.warn("Admin not found for updating transactionFeeCollected");
-//       }
-//     }
-
-//     // Create a withdrawal request with pending status
-//     withdrawal = await Withdrawal.create(
-//       [
-//         {
-//           userId: user._id,
-//           amount,
-//           actualPayAmount: netAmount,
-//           withdrawalFee: adminDeduction,
-//           withdrawalFeePercentage: TRANSACTION_CHARGE,
-//           walletType,
-//           currencyType,
-//           status: "pending",
-//           walletAddress: user.walletAddress,
-//           requestedAmount: amount,
-//         },
-//       ],
-//       { session },
-//     );
-
-//     // Save user changes
-//     await User.updateOne(
-//       { _id: user._id },
-//       { [walletObj]: user[walletObj] },
-//       { session },
-//     );
-
-//     // Check if withdrawal amount is ≤ 500 USDT for automatic processing
-//     const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT;
-//     if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
-//       const encryptionKey = config.ENCRYPTION_KEY;
-//       if (!encryptionKey) {
-//         throw new Error("ENCRYPTION_KEY is not defined");
-//       }
-//       if (!config.ENCRYPTED_PRIVATE_KEY) {
-//         throw new Error("ENCRYPTED_PRIVATE_KEY is not defined");
-//       }
-//       privateKey = decryptPrivateKey(
-//         config.ENCRYPTED_PRIVATE_KEY,
-//         encryptionKey,
-//       );
-
-//       const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
-//       const walletSigner = new ethers.Wallet(privateKey, provider);
-//       const contract = new ethers.Contract(
-//         config.WITHDRAW_CONTRACT_ADDRESS,
-//         config.WITHDRAW_CONTRACT_ABI,
-//         walletSigner,
-//       );
-
-//       const usdtContract = new ethers.Contract(
-//         config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
-//         config.USDT_CONTRACT_ABI, // Replace with USDT ABI
-//         provider,
-//       );
-//       const contractBalance = await usdtContract.balanceOf(
-//         config.WITHDRAW_CONTRACT_ADDRESS,
-//       );
-
-//       const decimals = 18; // For USDT; adjust if needed
-//       const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
-
-//       if (!amountWei || isNaN(amountWei.toString())) {
-//         throw new Error("Invalid amount in Wei");
-//       }
-
-//       if (contractBalance.lt(amountWei)) {
-//         throw new Error(
-//           `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
-//             contractBalance,
-//             18,
-//           )} USDT available, ${netAmount} USDT required`,
-//         );
-//       }
-
-//       // Send transaction to contract's userWithdraw function
-//       const tx = await contract.userWithdraw(user.walletAddress, amountWei);
-//       const receipt = await tx.wait();
-//       // Update withdrawal status to completed
-//       await Withdrawal.updateOne(
-//         { _id: withdrawal[0]._id },
-//         { status: "completed", transactionHash: tx.hash },
-//         { session },
-//       );
-
-//       // Commit the database transaction after blockchain success
-//       await session.commitTransaction();
-
-//       // Update user cache after successful withdrawal
-//       user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
-
-//       res.status(200).json(
-//         successResponse("Withdrawal completed successfully", {
-//           withdrawalId: withdrawal[0]._id,
-//           requestedAmount: amount,
-//           netAmount,
-//           transactionCharge: adminDeduction,
-//           currencyType,
-//           walletType,
-//           status: "completed",
-//           walletAddress: user.walletAddress,
-//           txHash: tx.hash,
-//         }),
-//       );
-
-//       console.log(
-//         `Automatic withdrawal completed for user ${
-//           user._id
-//         }: requested $${amount.toFixed(4)}, ` +
-//           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-//             4,
-//           )} ` +
-//           `from ${walletType} wallet, txHash: ${tx.hash}`,
-//       );
-//     } else {
-//       // For amounts > 500 USDT, commit transaction and keep withdrawal pending
-//       await session.commitTransaction();
-
-//       // Update user cache after pending withdrawal
-//       user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
-
-//       res.status(200).json(
-//         successResponse(
-//           "Withdrawal request submitted and pending admin approval",
-//           {
-//             withdrawalId: withdrawal[0]._id,
-//             requestedAmount: amount,
-//             netAmount,
-//             transactionCharge: adminDeduction,
-//             currencyType,
-//             walletType,
-//             status: "pending",
-//             walletAddress: user.walletAddress,
-//           },
-//         ),
-//       );
-
-//       console.log(
-//         `Withdrawal request pending for user ${
-//           user._id
-//         }: requested $${amount.toFixed(4)}, ` +
-//           `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-//             4,
-//           )} ` +
-//           `from ${walletType} wallet`,
-//       );
-//     }
-//   } catch (error) {
-//     // Abort transaction only if it hasn't been committed
-//     await session.abortTransaction();
-
-//     // Handle blockchain transaction errors and revert changes
-//     // if (
-//     //   error.code === "INSUFFICIENT_FUNDS" ||
-//     //   error.code === "NETWORK_ERROR" ||
-//     //   error.message.includes("transaction failed")
-//     // ) {
-//     //   // Revert user wallet balance
-//     //   const userUpdate = await User.findById(req.user.id);
-
-//     //   if (userUpdate && walletMap[req.body.walletType]) {
-//     //     const walletObj = walletMap[req.body.walletType];
-//     //     userUpdate[walletObj].amount = Number(
-//     //       (userUpdate[walletObj].amount + req.body.amount).toFixed(2)
-//     //     );
-//     //     await userUpdate.save();
-
-//     //     // Update user cache after reversion
-//     //     await redisClient.set(`user:${req.user.id}`, JSON.stringify(userUpdate), 'EX', 3600).catch((err) => {
-//     //       console.warn(`Redis set error for user:${req.user.id}:`, err.message);
-//     //     });
-//     //   }
-
-//     //   // Revert admin fee if deducted
-//     //   if (adminDeduction > 0) {
-//     //     const adminUpdate = await Admin.findOne({ referralCode: "admin123" });
-//     //     if (adminUpdate) {
-//     //       adminUpdate.transactionFeeCollected = Number(
-//     //         (adminUpdate.transactionFeeCollected - adminDeduction).toFixed(2)
-//     //       );
-//     //       await adminUpdate.save();
-
-//     //       // Update admin cache after reversion
-//     //       await redisClient.set(`admin:admin123`, JSON.stringify(adminUpdate), 'EX', 3600).catch((err) => {
-//     //         console.warn(`Redis set error for admin:admin123:`, err.message);
-//     //       });
-//     //     }
-//     //   }
-
-//     //   // Update withdrawal to failed
-//     //   if (withdrawal && withdrawal[0]) {
-//     //     await Withdrawal.updateOne(
-//     //       { _id: withdrawal[0]._id },
-//     //       { status: "failed", error: error.message }
-//     //     );
-//     //   }
-
-//     //   return res
-//     //     .status(500)
-//     //     .json(errorResponse("Withdrawal transaction failed; balance restored"));
-//     // }
-
-//     logger.error(
-//       `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
-//       error.message,
-//       error.stack,
-//     );
-//     res.status(500).json(errorResponse(error.message));
-//   } finally {
-//     session.endSession();
-//   }
-// };
-
-
-
 const withdraw = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  let withdrawal = null;
+  let adminDeduction = 0;
+
   try {
-    const { amount, walletType, walletAddress } = req.body;
+    const { walletType, amount, currencyType = "USDT", otp } = req.body;
     const userId = req.user.id;
-
-    // ✅ Validate amount
-    if (!amount || amount <= 0) {
-      throw new Error("Invalid amount");
-    }
-
-    // ✅ Minimum withdraw 
-    if (amount < 5) {
-      throw new Error("Minimum withdrawal amount is 5 USDC");
-    }
-
-    if (!walletAddress) {
-      throw new Error("Wallet address required");
-    }
-
-    if (!["referral", "roi"].includes(walletType)) {
-      throw new Error("Invalid wallet type");
-    }
 
     const user = await User.findById(userId).session(session);
 
-    if (!user) throw new Error("User not found");
-
-    //  Wallet match check
-    const inputAddress = walletAddress.trim().toLowerCase();
-    const savedAddress = user.walletAddress?.trim().toLowerCase();
-
-    if (!savedAddress) {
-      throw new Error("No wallet address saved");
+    if (!user) {
+      throw new Error("User not found");
     }
 
-    if (inputAddress !== savedAddress) {
-      throw new Error("Wallet address mismatch");
+    // Validate OTP
+    await verifyOTP(user.email, otp, "withdrawal");
+    logger.info(`OTP verified for user ${userId} for withdrawal request.`);
+
+    // Check if wallet address is not set or is "NA"
+    if (!user.walletAddress || user.walletAddress === "NA") {
+      throw new Error("Set wallet address first");
     }
 
-    const wallet = user.wallets[walletType];
+    // Validate amount
+    if (!amount || amount <= 0) {
+      throw new Error("Invalid withdrawal amount");
+    }
 
+    // Minimum withdrawal amount (e.g., $1)
+    const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
+    if (amount < MIN_WITHDRAWAL_AMOUNT) {
+      throw new Error(
+        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`
+      );
+    }
+
+    // Wallet mapping
+    const walletMap = {
+      principal: "principalWallet",
+      my: "myWallet",
+      deposit: "depositWallet",
+      referral: "referralWallet",
+    };
+
+    if (!walletMap[walletType]) {
+      throw new Error("Invalid wallet type");
+    }
+
+    // Determine the wallet field and check balance
+    const walletObj = walletMap[walletType];
+    const wallet = user[walletObj];
     if (!wallet || wallet.amount < amount) {
-      throw new Error("Insufficient balance");
+      throw new Error(
+        `Insufficient funds in ${
+          walletType.charAt(0).toUpperCase() + walletType.slice(1)
+        } Wallet`
+      );
     }
 
-    //  Deduct balance instantly
-    user.wallets[walletType].amount = Number(
-      (wallet.amount - amount).toFixed(2)
-    );
+    // Apply transaction charge: 10% for my and referral wallets, 0% for others
+    const TRANSACTION_CHARGE = ["my", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 10
+      : 0;
+    adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
+    const netAmount = Number((amount - adminDeduction).toFixed(2));
 
-    //  Generate Transaction Hash
-    const transactionHash = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    // Ensure netAmount is positive
+    if (netAmount <= 0) {
+      throw new Error(
+        "Net withdrawal amount after charges must be greater than 0"
+      );
+    }
 
-    //  Create withdrawal (always USDC)
-    const withdrawal = await Withdrawal.create(
+    // Deduct the full amount from the user's wallet
+    user[walletObj].amount = Number((wallet.amount - amount).toFixed(2));
+
+    // Update admin's transactionFeeCollected if a fee was applied
+    if (adminDeduction > 0) {
+      const adminCacheKey = `admin:admin123`;
+      let admin;
+      const cachedAdmin = await redisClient.get(adminCacheKey).catch((err) => {
+        console.warn(`Redis get error for ${adminCacheKey}:`, err.message);
+        return null;
+      });
+
+      if (cachedAdmin) {
+        admin = JSON.parse(cachedAdmin);
+      } else {
+        admin = await Admin.findOne({ referralCode: "admin123" }).session(
+          session
+        );
+        if (admin) {
+          await redisClient
+            .set(adminCacheKey, JSON.stringify(admin), "EX", 3600)
+            .catch((err) => {
+              console.warn(
+                `Redis set error for ${adminCacheKey}:`,
+                err.message
+              );
+            });
+        }
+      }
+
+      if (admin) {
+        admin.transactionFeeCollected = Number(
+          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2)
+        );
+        await Admin.updateOne(
+          { referralCode: "admin123" },
+          { transactionFeeCollected: admin.transactionFeeCollected },
+          { session }
+        );
+      } else {
+        console.warn("Admin not found for updating transactionFeeCollected");
+      }
+    }
+
+    // Create a withdrawal request with pending status
+    withdrawal = await Withdrawal.create(
       [
         {
           userId: user._id,
           amount,
-          actualPayAmount: amount,
-          withdrawalFee: 0,
-          withdrawalFeePercentage: 0,
+          actualPayAmount: netAmount,
+          withdrawalFee: adminDeduction,
+          withdrawalFeePercentage: TRANSACTION_CHARGE,
           walletType,
-          currencyType: "USDC", 
+          currencyType,
           status: "pending",
-          walletAddress,
-          transactionHash,
+          walletAddress: user.walletAddress,
+          requestedAmount: amount,
         },
       ],
       { session }
     );
 
-    await user.save({ session });
+    // Save user changes
+    await User.updateOne(
+      { _id: user._id },
+      { [walletObj]: user[walletObj] },
+      { session }
+    );
 
-    await session.commitTransaction();
+    // Check if withdrawal amount is ≤ 500 USDT for automatic processing
+    const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT;
+    if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
+      const encryptionKey = config.ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        throw new Error("ENCRYPTION_KEY is not defined");
+      }
+      if (!config.ENCRYPTED_PRIVATE_KEY) {
+        throw new Error("ENCRYPTED_PRIVATE_KEY is not defined");
+      }
+      privateKey = decryptPrivateKey(
+        config.ENCRYPTED_PRIVATE_KEY,
+        encryptionKey
+      );
 
-    return res.status(200).json({
-      success: true,
-      message: "Withdrawal request submitted",
-      data: {
-        withdrawalId: withdrawal[0]._id,
-        transactionHash,
-        amount,
-        walletType,
-        currencyType: "USDC", //  return 
-        status: "pending",
-        createdAt: withdrawal[0].createdAt,
-        balances: {
-          referral: user.wallets.referral?.amount || 0,
-          roi: user.wallets.roi?.amount || 0,
-        },
-      },
-    });
+      const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
+      const walletSigner = new ethers.Wallet(privateKey, provider);
+      const contract = new ethers.Contract(
+        config.WITHDRAW_CONTRACT_ADDRESS,
+        config.WITHDRAW_CONTRACT_ABI,
+        walletSigner
+      );
 
+      const usdtContract = new ethers.Contract(
+        config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
+        config.USDT_CONTRACT_ABI, // Replace with USDT ABI
+        provider
+      );
+      const contractBalance = await usdtContract.balanceOf(
+        config.WITHDRAW_CONTRACT_ADDRESS
+      );
+
+      const decimals = 18; // For USDT; adjust if needed
+      const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
+
+      if (!amountWei || isNaN(amountWei.toString())) {
+        throw new Error("Invalid amount in Wei");
+      }
+
+      if (contractBalance.lt(amountWei)) {
+        throw new Error(
+          `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
+            contractBalance,
+            18
+          )} USDT available, ${netAmount} USDT required`
+        );
+      }
+
+      // Send transaction to contract's userWithdraw function
+      const tx = await contract.userWithdraw(user.walletAddress, amountWei);
+      const receipt = await tx.wait();
+      // Update withdrawal status to completed
+      await Withdrawal.updateOne(
+        { _id: withdrawal[0]._id },
+        { status: "completed", transactionHash: tx.hash },
+        { session }
+      );
+
+      // Commit the database transaction after blockchain success
+      await session.commitTransaction();
+
+      // Update user cache after successful withdrawal
+      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
+
+      res.status(200).json(
+        successResponse("Withdrawal completed successfully", {
+          withdrawalId: withdrawal[0]._id,
+          requestedAmount: amount,
+          netAmount,
+          transactionCharge: adminDeduction,
+          currencyType,
+          walletType,
+          status: "completed",
+          walletAddress: user.walletAddress,
+          txHash: tx.hash,
+        })
+      );
+
+      console.log(
+        `Automatic withdrawal completed for user ${
+          user._id
+        }: requested $${amount.toFixed(4)}, ` +
+          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
+            4
+          )} ` +
+          `from ${walletType} wallet, txHash: ${tx.hash}`
+      );
+    } else {
+      // For amounts > 500 USDT, commit transaction and keep withdrawal pending
+      await session.commitTransaction();
+
+      // Update user cache after pending withdrawal
+      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
+
+      res.status(200).json(
+        successResponse(
+          "Withdrawal request submitted and pending admin approval",
+          {
+            withdrawalId: withdrawal[0]._id,
+            requestedAmount: amount,
+            netAmount,
+            transactionCharge: adminDeduction,
+            currencyType,
+            walletType,
+            status: "pending",
+            walletAddress: user.walletAddress,
+          }
+        )
+      );
+
+      console.log(
+        `Withdrawal request pending for user ${
+          user._id
+        }: requested $${amount.toFixed(4)}, ` +
+          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
+            4
+          )} ` +
+          `from ${walletType} wallet`
+      );
+    }
   } catch (error) {
+    // Abort transaction only if it hasn't been committed
     await session.abortTransaction();
 
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    // Handle blockchain transaction errors and revert changes
+    // if (
+    //   error.code === "INSUFFICIENT_FUNDS" ||
+    //   error.code === "NETWORK_ERROR" ||
+    //   error.message.includes("transaction failed")
+    // ) {
+    //   // Revert user wallet balance
+    //   const userUpdate = await User.findById(req.user.id);
+
+    //   if (userUpdate && walletMap[req.body.walletType]) {
+    //     const walletObj = walletMap[req.body.walletType];
+    //     userUpdate[walletObj].amount = Number(
+    //       (userUpdate[walletObj].amount + req.body.amount).toFixed(2)
+    //     );
+    //     await userUpdate.save();
+
+    //     // Update user cache after reversion
+    //     await redisClient.set(`user:${req.user.id}`, JSON.stringify(userUpdate), 'EX', 3600).catch((err) => {
+    //       console.warn(`Redis set error for user:${req.user.id}:`, err.message);
+    //     });
+    //   }
+
+    //   // Revert admin fee if deducted
+    //   if (adminDeduction > 0) {
+    //     const adminUpdate = await Admin.findOne({ referralCode: "admin123" });
+    //     if (adminUpdate) {
+    //       adminUpdate.transactionFeeCollected = Number(
+    //         (adminUpdate.transactionFeeCollected - adminDeduction).toFixed(2)
+    //       );
+    //       await adminUpdate.save();
+
+    //       // Update admin cache after reversion
+    //       await redisClient.set(`admin:admin123`, JSON.stringify(adminUpdate), 'EX', 3600).catch((err) => {
+    //         console.warn(`Redis set error for admin:admin123:`, err.message);
+    //       });
+    //     }
+    //   }
+
+    //   // Update withdrawal to failed
+    //   if (withdrawal && withdrawal[0]) {
+    //     await Withdrawal.updateOne(
+    //       { _id: withdrawal[0]._id },
+    //       { status: "failed", error: error.message }
+    //     );
+    //   }
+
+    //   return res
+    //     .status(500)
+    //     .json(errorResponse("Withdrawal transaction failed; balance restored"));
+    // }
+
+    logger.error(
+      `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
+      error.message,
+      error.stack
+    );
+    res.status(500).json(errorResponse(error.message));
   } finally {
     session.endSession();
   }
 };
-
-
 
 
 
