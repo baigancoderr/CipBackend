@@ -33,6 +33,8 @@ contactFormEmail,
   updateWallet,
   addWalletFirstTime,
   getDeposits,
+  updateEmail,
+  addEmailFirstTime
 } = require("../controllers/userControllers/userController");
 const authMiddleware = require("../middleware/authMiddleware");
 const { investInPlan, getUserInvestments, getUserOverview } = require("../controllers/userControllers/investmentController");
@@ -136,6 +138,9 @@ router.post("/wallet/update-address", authMiddleware(["user"]), updateWalletAddr
 // Add Wallet Routes 
 router.post("/add-wallet", authMiddleware(), addWalletFirstTime);
 router.put("/update-wallet", authMiddleware(["user"]), updateWallet);
+
+router.put("/update-email", authMiddleware(["user"]), updateEmail);
+router.post("/add-email", authMiddleware(), addEmailFirstTime);
 
 
 router.get("/team-tree-view", authMiddleware(["user"]), getTeamTreeView);
