@@ -23,7 +23,7 @@ const investInPlan = async (req, res) => {
         .json(errorResponse("Amount is required"));
     }
 
-    const user = await User.findOne({ userId: urId });
+    const user = await User.findById({ _id: urId });
 
     if (!user) {
       return res.status(404).json({
