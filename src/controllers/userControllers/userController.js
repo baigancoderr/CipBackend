@@ -258,6 +258,11 @@ const requestWithdrawalOtp = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) throw new Error("User not found");
 
+    //check user mail id exist or not
+    if (!user.email) {
+      throw new Error("Email not found. Please set your email before requesting withdrawal.");
+    }
+
     const walletMap = {
       deposit: "deposit",
       referral: "referral",

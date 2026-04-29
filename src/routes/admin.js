@@ -36,6 +36,9 @@ const {
 const {verifyKYC, getAllKYC} = require("../controllers/userControllers/kycController");
 const {adminUpdateUserDetails} = require("../controllers/adminControllers/userUpdateController");
 
+// Swap Controller
+const { getAllSwapHistory } = require("../controllers/userControllers/swapController");
+
 const multer = require('multer');
 const authMiddleware = require("../middleware/authMiddleware");
 
@@ -133,6 +136,10 @@ router.get(
   authMiddleware(["admin"]),
   getWalletUpdateLogs
 );
+
+// Swap History (Admin Only)
+router.get("/swap-history", authMiddleware(["admin"]), getAllSwapHistory);
+
 router.post("/logout", authMiddleware(["admin"]), adminLogout);
 
 
