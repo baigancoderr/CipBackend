@@ -13,17 +13,17 @@ const investInPlan = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { telegramId, amount } = req.body;
+    const { amount } = req.body;
     const urId = req.user.id;
 
     // Validation
-    if (!telegramId || !amount) {
+    if ( !amount) {
       return res
         .status(400)
-        .json(errorResponse("telegramId and amount are required"));
+        .json(errorResponse("Amount is required"));
     }
 
-    const user = await User.findOne({ telegramId });
+    const user = await User.findOne({ userId: urId });
 
     if (!user) {
       return res.status(404).json({

@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const WITHDRAW_CONTRACT_ABI = require('./withdrawAbi_testnet').WITHDRAW_CONTRACT_ABI;
 const USDT_CONTRACT_ABI = require('./usdtAbi_testnet').USDT_CONTRACT_ABI;
+const CIP_CONTRACT_ABI = require('./cipAbi_testnet').CIP_CONTRACT_ABI;
 
 const config = {
   PORT: Number(process.env.PORT) || 5000, 
@@ -22,10 +23,13 @@ const config = {
   EMAIL_FROM: process.env.EMAIL_FROM || 'no-reply@example.com',
   BSC_RPC_URL: process.env.BSC_RPC_URL || 'https://default-rpc-url.com',
   USDT_CONTRACT_ADDRESS: process.env.USDT_CONTRACT_ADDRESS || '',
+  CIP_CONTRACT_ADDRESS: process.env.CIP_CONTRACT_ADDRESS || '',
+
   CONTRACT_ADDRESS: process.env.CONTRACT_ADDRESS || '',
   WITHDRAW_CONTRACT_ADDRESS: process.env.WITHDRAW_CONTRACT_ADDRESS || '',
   WITHDRAW_CONTRACT_ABI,
   USDT_CONTRACT_ABI,
+  CIP_CONTRACT_ABI,
   ENCRYPTED_PRIVATE_KEY: process.env.ENCRYPTED_PRIVATE_KEY,
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   MIN_WITHDRAWAL_AMOUNT: 5,
