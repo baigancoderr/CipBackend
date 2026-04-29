@@ -144,6 +144,10 @@ router.post("/add-wallet", authMiddleware(), addWalletFirstTime);
 router.put("/update-wallet", authMiddleware(["user"]), updateWallet);
 
 
+router.post("/add-email", authMiddleware(), addEmailFirstTime);
+router.put("/update-email", authMiddleware(["user"]), updateEmail);
+
+
 router.get("/team-tree-view", authMiddleware(["user"]), getTeamTreeView);
 router.get(
   "/referral-level-wise-team",

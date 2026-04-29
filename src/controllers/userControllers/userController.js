@@ -2357,7 +2357,101 @@ const addWalletFirstTime = async (req, res) => {
 
 
 
+const updateEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userId = req.user.id || req.user._id;
 
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, message: "Invalid email format" });
+    }
+
+    // ✅ Check if email already used by another user
+    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "This email is already registered with another account",
+      });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { _id: userId, isActive: true },
+      { email },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found or inactive" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Email updated successfully",
+      user,
+    });
+
+  } catch (error) {
+    console.error("Email update error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+const addEmailFirstTime = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userId = req.user.id || req.user._id;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, message: "Invalid email format" });
+    }
+
+    // ✅ Check if email already used by any user
+    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "This email is already registered with another account",
+      });
+    }
+
+    const user = await User.findOne({ _id: userId, isActive: true });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (user.email && user.email !== "") {
+      return res.status(400).json({
+        success: false,
+        message: "Email already added, use update instead",
+      });
+    }
+
+    user.email = email;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Email added successfully",
+      user,
+    });
+
+  } catch (error) {
+    console.error("Add email error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 
 
@@ -2394,6 +2488,8 @@ module.exports = {
   updateWallet,
   addWalletFirstTime,
   getDeposits,
+  addEmailFirstTime,
+  updateEmail,
   
 
 };
