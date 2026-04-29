@@ -10,6 +10,10 @@ cron.schedule("*/1 * * * *", async () => {
     // await distributeDailyROI();
     // await checkBalanceAndProcess();
     // await updateLivePriceInDB();
+
+     await distributeDailyROI();
+    await checkBalanceAndProcess();
+    await updateLivePriceInDB();
     console.log("Daily ROI and Binary Income distribution completed.");
   } catch (error) {
     console.error("Error in daily ROI cron job:", error);

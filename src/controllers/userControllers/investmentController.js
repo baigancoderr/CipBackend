@@ -199,14 +199,14 @@ const getUserOverview = async (req, res) => {
     const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
     const sgnPrice = sgnPriceDoc?.price || 0;
 
-    // Investment summary (total invested, received tokens, claimed tokens)
+    // Investment summary (total invested, Return tokens, claimed tokens)
     const summary = await Investment.aggregate([
       { $match: { userId: user.userId } },
       {
         $group: {
           _id: null,
           totalInvested: { $sum: "$amount" },
-          totalReceivedTokens: { $sum: "$tokensReceived" },
+          totalReturnTokens: { $sum: "$totalReturnTokens" },
           totalClaimedTokens: {
             $sum: { $multiply: ["$claimedDays", "$dailyIncomeTokens"] }
           }
@@ -216,7 +216,7 @@ const getUserOverview = async (req, res) => {
 
     const stats = summary[0] || {
       totalInvested: 0,
-      totalReceivedTokens: 0,
+      totalReturnTokens: 0,
       totalClaimedTokens: 0,
     };
 
@@ -230,7 +230,7 @@ const getUserOverview = async (req, res) => {
         },
         investments: {
           totalInvested: parseFloat(stats.totalInvested.toFixed(2)),
-          totalReceivedTokens: parseFloat(stats.totalReceivedTokens.toFixed(8)),
+          totalReturnTokens: parseFloat(stats.totalReturnTokens.toFixed(8)),
           totalClaimedTokens: parseFloat(stats.totalClaimedTokens.toFixed(8)),
         },
         currentTokenPrice: sgnPrice,
