@@ -209,6 +209,42 @@ const getAdminDashboard = async (req, res) => {
       "price",
     );
 
+    // Locked Token: Sum of tokensReceived (total return tokens for all users)
+    const lockedToken = await Investment.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$totalReturn",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
+    // Claimed Token: Sum of all ROI distributions (daily claimed amounts)
+    const claimedToken = await RoiDistribution.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$dailyROI",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
+    // Fee Collected: Sum of all withdrawal fees
+    const feeCollected = await Withdrawal.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$withdrawalFee",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
 
     // Fetch 5 latest transactions (Deposit, Withdrawal requests, and Stake)
     const latestDeposits = await Deposit.find()
@@ -263,6 +299,9 @@ const getAdminDashboard = async (req, res) => {
         totalReferralRewardDistributed,
         totalSwapedAmount,
         emgtTokenPrice,
+        lockedToken,
+        claimedToken,
+        feeCollected,
         latestTransactions: allTransactions,
         latestUsers,
       }),
@@ -272,6 +311,8 @@ const getAdminDashboard = async (req, res) => {
     res.status(500).json(errorResponse(error.message));
   }
 };
+
+
 
 // Get all users with all data including password
 const getAllUsers = async (req, res) => {
