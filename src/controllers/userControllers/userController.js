@@ -2400,4 +2400,5 @@ module.exports = {
   getDeposits,
   addEmailFirstTime,
   updateEmail,
+  decryptPrivateKey,
 };

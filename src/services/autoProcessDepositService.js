@@ -2,6 +2,8 @@ const cron = require("node-cron");
 const ethers = require("ethers");
 const mongoose = require('mongoose');
 const Price = require('../models/Price');
+const config = require("../config/envConfig");
+const crypto = require("crypto");
 require("dotenv").config();
 
 // ================== CONFIG ==================
@@ -11,10 +13,59 @@ const MONITOR_WALLET = "0x42EC3cf99Bbc169C1d22c70339b5625A993CC033";
 const DISTRIBUTOR_ADDRESS = "0x79253197F42Cf34C51D5B91a837CA8bB62fa9BCA"; // Aapka latest contract
 const POOL_ADDRESS = "0x0bCDA542F423b31b511CEb47967d6759125E0204";
 
-const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
+
+const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
+  try {
+    // Ensure inputs are provided
+    if (!encryptedPrivateKey || !encryptionKey) {
+      throw new Error("Missing encrypted private key or encryption key");
+    }
+
+    // Split the encrypted string into iv, salt, and encrypted components
+    const [ivHex, saltHex, encryptedHex] = encryptedPrivateKey.split(":");
+
+    if (!ivHex || !saltHex || !encryptedHex) {
+      throw new Error("Invalid encrypted private key format");
+    }
+
+    // Convert hex strings back to Buffers
+    const iv = Buffer.from(ivHex, "hex");
+    const salt = Buffer.from(saltHex, "hex");
+    const encrypted = Buffer.from(encryptedHex, "hex");
+
+    // Validate buffer lengths
+    if (iv.length !== 16) {
+      throw new Error("Invalid IV length");
+    }
+    if (salt.length < 8) {
+      throw new Error("Invalid salt length");
+    }
+    if (encrypted.length === 0) {
+      throw new Error("Empty encrypted data");
+    }
+
+    // Derive the same key using PBKDF2
+    const key = crypto.pbkdf2Sync(encryptionKey, salt, 100000, 32, "sha256");
+
+    // Create decipher
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+
+    // Decrypt
+    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
+  } catch (error) {
+    throw new Error(`Decryption failed: ${error.message}`);
+  }
+};
+
+const OWNER_PRIVATE_KEY = decryptPrivateKey(config.OWNER_PRIVATE_KEY, config.ENCRYPTION_KEY);
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
 const wallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+
+
 
 // ABIs
 const USDC_ABI = [
