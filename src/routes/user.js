@@ -60,6 +60,11 @@ const {
   disable2FA,
 } = require("../controllers/userControllers/2faController");
 
+// Swap Controller
+const { swapToDeposit, getMySwapHistory  } = require("../controllers/userControllers/swapController");
+
+
+
 router.options("/contactformmail", (req, res) => {
   res.set({
     "Access-Control-Allow-Origin": req.get("Origin") || "*",
@@ -126,6 +131,10 @@ router.get(
   authMiddleware(["user"]),
   getWithdrawalHistory,
 );
+
+// Swap Routes
+router.post("/swap-to-deposit", authMiddleware(["user"]), swapToDeposit);
+router.get("/swap-history", authMiddleware(["user"]), getMySwapHistory);
 
 // Wallet Address Update Routes
 router.post(
