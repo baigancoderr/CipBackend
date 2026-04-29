@@ -246,7 +246,11 @@ const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
 };
 
 const requestWithdrawalOtp = async (req, res) => {
-  const { walletType, amount, currencyType } = req.body;
+  const { walletType, amount, } = req.body;
+
+  console.log(
+    `Withdrawal OTP request: userId=${req.user.id}, walletType=${walletType}, amount=${amount}`,
+  ); // Debug log
 
   try {
     const userId = req.user.id;
@@ -294,6 +298,8 @@ const requestWithdrawalOtp = async (req, res) => {
 
     const otp = await saveOTP(user.email, "withdrawal");
 
+    const currencyType = walletType === "roi" ? "CIP" : "USDC";
+
     const requestId = uuidv4();
     await redisClient.set(
       `withdrawal:${requestId}`,
@@ -338,35 +344,31 @@ const withdraw = async (req, res) => {
   let adminDeduction = 0;
 
   try {
-    const { walletType, amount, currencyType = "USDC", otp } = req.body;
+    const { walletType, amount, otp } = req.body;
     const userId = req.user.id;
 
-    const user = await User.findById(userId).session(session);
+    console.log(
+      `Withdrawal request: userId=${userId}, walletType=${walletType}, amount=${amount}}`,
+    );
 
-    if (!user) {
-      throw new Error("User not found");
-    }
+    const user = await User.findById(userId).session(session);
+    if (!user) throw new Error("User not found");
 
     // Validate OTP
     await verifyOTP(user.email, otp, "withdrawal");
     logger.info(`OTP verified for user ${userId} for withdrawal request.`);
 
-    // Check if wallet address is not set or is "NA"
     if (!user.walletAddress || user.walletAddress === "NA") {
       throw new Error("Set wallet address first");
     }
 
-    // Validate amount
     if (!amount || amount <= 0) {
       throw new Error("Invalid withdrawal amount");
     }
 
-    // Minimum withdrawal amount (e.g., $1)
     const MIN_WITHDRAWAL_AMOUNT = config.MIN_WITHDRAWAL_AMOUNT;
     if (amount < MIN_WITHDRAWAL_AMOUNT) {
-      throw new Error(
-        `Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`,
-      );
+      throw new Error(`Withdrawal amount must be at least $${MIN_WITHDRAWAL_AMOUNT}`);
     }
 
     const walletMap = {
@@ -378,167 +380,150 @@ const withdraw = async (req, res) => {
     const walletKey = walletMap[walletType];
     if (!walletKey) throw new Error("Invalid wallet type");
 
-    // Safe access to nested wallet
+    // Safe nested wallet
     user.wallets = user.wallets || {};
     user.wallets[walletKey] = user.wallets[walletKey] || { amount: 0 };
 
     const wallet = user.wallets[walletKey];
+
     if (wallet.amount < amount) {
       throw new Error(`Insufficient funds in ${walletType} Wallet`);
     }
 
- 
-    // Apply transaction charge: 10% for my and referral wallets, 0% for others
+    // Transaction charge
     const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
       ? config.TRANSACTION_CHARGE || 5
       : 0;
+
     adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
     const netAmount = Number((amount - adminDeduction).toFixed(2));
 
-    // Ensure netAmount is positive
     if (netAmount <= 0) {
-      throw new Error(
-        "Net withdrawal amount after charges must be greater than 0",
-      );
+      throw new Error("Net withdrawal amount after charges must be greater than 0");
     }
 
-    // Deduct the full amount from the user's wallet
-    user[wallet].amount = Number((wallet.amount - amount).toFixed(2));
+    // Deduct amount
+    wallet.amount = Number((wallet.amount - amount).toFixed(2));
 
-    // Update admin's transactionFeeCollected if a fee was applied
+    // Update admin fee
     if (adminDeduction > 0) {
       const adminCacheKey = `admin:admin123`;
-      let admin;
-      const cachedAdmin = await redisClient.get(adminCacheKey).catch((err) => {
-        console.warn(`Redis get error for ${adminCacheKey}:`, err.message);
-        return null;
-      });
+      let admin = null;
 
-      if (cachedAdmin) {
-        admin = JSON.parse(cachedAdmin);
-      } else {
-        admin = await Admin.findOne({ referralCode: "admin123" }).session(
-          session,
-        );
+      const cachedAdmin = await redisClient.get(adminCacheKey).catch(() => null);
+      if (cachedAdmin) admin = JSON.parse(cachedAdmin);
+      else {
+        admin = await Admin.findOne({ referralCode: "admin123" }).session(session);
         if (admin) {
-          await redisClient
-            .set(adminCacheKey, JSON.stringify(admin), "EX", 3600)
-            .catch((err) => {
-              console.warn(
-                `Redis set error for ${adminCacheKey}:`,
-                err.message,
-              );
-            });
+          await redisClient.set(adminCacheKey, JSON.stringify(admin), "EX", 3600).catch(() => {});
         }
       }
 
       if (admin) {
         admin.transactionFeeCollected = Number(
-          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2),
+          ((admin.transactionFeeCollected || 0) + adminDeduction).toFixed(2)
         );
         await Admin.updateOne(
           { referralCode: "admin123" },
           { transactionFeeCollected: admin.transactionFeeCollected },
-          { session },
+          { session }
         );
-      } else {
-        console.warn("Admin not found for updating transactionFeeCollected");
       }
     }
 
-    // Create a withdrawal request with pending status
-    withdrawal = await Withdrawal.create(
-      [
-        {
-          userId: user._id,
-          amount,
-          actualPayAmount: netAmount,
-          withdrawalFee: adminDeduction,
-          withdrawalFeePercentage: TRANSACTION_CHARGE,
-          walletType,
-          currencyType,
-          status: "pending",
-          walletAddress: user.walletAddress,
-          requestedAmount: amount,
-        },
-      ],
-      { session },
-    );
+    const currencyType = walletType === "roi" ? "CIP" : "USDC";
 
-    // Save user changes
-    await User.updateOne(
-      { _id: user._id },
-      { [walletObj]: user[walletObj] },
-      { session },
-    );
+    // Create withdrawal (single document - safer)
+    withdrawal = await new Withdrawal({
+      userId: user._id,
+      amount,
+      actualPayAmount: netAmount,
+      withdrawalFee: adminDeduction,
+      withdrawalFeePercentage: TRANSACTION_CHARGE,
+      walletType,
+      currencyType,
+      status: "pending",
+      walletAddress: user.walletAddress,
+      requestedAmount: amount,
+    }).save({ session });
 
-    // Check if withdrawal amount is ≤ 500 USDT for automatic processing
-    const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT;
+    // Save user wallet changes
+    await user.save({ session });
+
+    // ====================== AUTO WITHDRAWAL ======================
+    const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT || 500;
     if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
-      const encryptionKey = config.ENCRYPTION_KEY;
-      if (!encryptionKey) {
-        throw new Error("ENCRYPTION_KEY is not defined");
+      if (!config.ENCRYPTION_KEY || !config.ENCRYPTED_PRIVATE_KEY) {
+        throw new Error("Encryption keys not configured");
       }
-      if (!config.ENCRYPTED_PRIVATE_KEY) {
-        throw new Error("ENCRYPTED_PRIVATE_KEY is not defined");
-      }
-      privateKey = decryptPrivateKey(
-        config.ENCRYPTED_PRIVATE_KEY,
-        encryptionKey,
-      );
+
+      const privateKey = decryptPrivateKey(config.ENCRYPTED_PRIVATE_KEY, config.ENCRYPTION_KEY);
 
       const provider = new ethers.providers.JsonRpcProvider(config.BSC_RPC_URL);
       const walletSigner = new ethers.Wallet(privateKey, provider);
+
       const contract = new ethers.Contract(
         config.WITHDRAW_CONTRACT_ADDRESS,
         config.WITHDRAW_CONTRACT_ABI,
-        walletSigner,
+        walletSigner
       );
 
-      const usdtContract = new ethers.Contract(
-        config.USDT_CONTRACT_ADDRESS, // Replace with USDT contract address
-        config.USDT_CONTRACT_ABI, // Replace with USDT ABI
-        provider,
-      );
-      const contractBalance = await usdtContract.balanceOf(
-        config.WITHDRAW_CONTRACT_ADDRESS,
-      );
+      // ================== DYNAMIC TOKEN CONFIG ==================
+      let tokenAddress, tokenABI, decimals;
 
-      const decimals = 18; // For USDT; adjust if needed
-      const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
-
-      if (!amountWei || isNaN(amountWei.toString())) {
-        throw new Error("Invalid amount in Wei");
+      if (walletType === "roi") {
+        tokenAddress = config.CIP_CONTRACT_ADDRESS;
+        tokenABI = config.CIP_CONTRACT_ABI;
+        decimals = 18; // CIP token decimals
+      } else if (currencyType === "USDC") {
+        tokenAddress = config.USDT_CONTRACT_ADDRESS; // or USDC_CONTRACT_ADDRESS
+        tokenABI = config.USDT_CONTRACT_ABI;
+        decimals = 6; // USDC on Base/Sepolia
+      } else {
+        throw new Error(`Unsupported currencyType: ${currencyType}`);
       }
+
+      // ←←← THIS WAS THE SOURCE OF THE ERROR
+      if (!tokenAddress || !tokenABI) {
+        throw new Error(`Missing config for ${currencyType} (CIP/USDC contract address or ABI)`);
+      }
+
+      const tokenContract = new ethers.Contract(tokenAddress, tokenABI, provider);
+
+      const contractBalance = await tokenContract.balanceOf(config.WITHDRAW_CONTRACT_ADDRESS);
+      const amountWei = ethers.utils.parseUnits(netAmount.toString(), decimals);
 
       if (contractBalance.lt(amountWei)) {
         throw new Error(
-          `Contract has insufficient USDT balance: ${ethers.utils.formatUnits(
+          `Contract has insufficient ${currencyType} balance. Available: ${ethers.utils.formatUnits(
             contractBalance,
-            18,
-          )} USDT available, ${netAmount} USDT required`,
+            decimals
+          )} ${currencyType}, Required: ${netAmount}`
         );
       }
 
-      // Send transaction to contract's userWithdraw function
-      const tx = await contract.userWithdraw(user.walletAddress, amountWei);
-      const receipt = await tx.wait();
-      // Update withdrawal status to completed
+      // Call correct function
+      let tx;
+      if (walletType === "roi") {
+        tx = await contract.userWithdrawCIP(user.walletAddress, amountWei);
+      } else if (currencyType === "USDC") {
+        tx = await contract.userWithdrawUSDC(user.walletAddress, amountWei);
+      }
+
+      await tx.wait();
+
+      // Mark as completed
       await Withdrawal.updateOne(
-        { _id: withdrawal[0]._id },
+        { _id: withdrawal._id },
         { status: "completed", transactionHash: tx.hash },
-        { session },
+        { session }
       );
 
-      // Commit the database transaction after blockchain success
       await session.commitTransaction();
-
-      // Update user cache after successful withdrawal
-      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
 
       res.status(200).json(
         successResponse("Withdrawal completed successfully", {
-          withdrawalId: withdrawal[0]._id,
+          withdrawalId: withdrawal._id,
           requestedAmount: amount,
           netAmount,
           transactionCharge: adminDeduction,
@@ -547,110 +532,35 @@ const withdraw = async (req, res) => {
           status: "completed",
           walletAddress: user.walletAddress,
           txHash: tx.hash,
-        }),
+        })
       );
 
-      console.log(
-        `Automatic withdrawal completed for user ${
-          user._id
-        }: requested $${amount.toFixed(4)}, ` +
-          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-            4,
-          )} ` +
-          `from ${walletType} wallet, txHash: ${tx.hash}`,
-      );
+      console.log(`✅ Auto ${currencyType} withdrawal completed for user ${user._id}, tx: ${tx.hash}`);
     } else {
-      // For amounts > 500 USDT, commit transaction and keep withdrawal pending
       await session.commitTransaction();
 
-      // Update user cache after pending withdrawal
-      user[walletObj].amount = Number(user[walletObj].amount.toFixed(2));
-
       res.status(200).json(
-        successResponse(
-          "Withdrawal request submitted and pending admin approval",
-          {
-            withdrawalId: withdrawal[0]._id,
-            requestedAmount: amount,
-            netAmount,
-            transactionCharge: adminDeduction,
-            currencyType,
-            walletType,
-            status: "pending",
-            walletAddress: user.walletAddress,
-          },
-        ),
+        successResponse("Withdrawal request submitted and pending admin approval", {
+          withdrawalId: withdrawal._id,
+          requestedAmount: amount,
+          netAmount,
+          transactionCharge: adminDeduction,
+          currencyType,
+          walletType,
+          status: "pending",
+          walletAddress: user.walletAddress,
+        })
       );
 
-      console.log(
-        `Withdrawal request pending for user ${
-          user._id
-        }: requested $${amount.toFixed(4)}, ` +
-          `net $${netAmount.toFixed(4)}, charge $${adminDeduction.toFixed(
-            4,
-          )} ` +
-          `from ${walletType} wallet`,
-      );
+      console.log(`📌 ${currencyType} withdrawal request pending for user ${user._id}`);
     }
   } catch (error) {
-    // Abort transaction only if it hasn't been committed
     await session.abortTransaction();
-
-    // Handle blockchain transaction errors and revert changes
-    // if (
-    //   error.code === "INSUFFICIENT_FUNDS" ||
-    //   error.code === "NETWORK_ERROR" ||
-    //   error.message.includes("transaction failed")
-    // ) {
-    //   // Revert user wallet balance
-    //   const userUpdate = await User.findById(req.user.id);
-
-    //   if (userUpdate && walletMap[req.body.walletType]) {
-    //     const walletObj = walletMap[req.body.walletType];
-    //     userUpdate[walletObj].amount = Number(
-    //       (userUpdate[walletObj].amount + req.body.amount).toFixed(2)
-    //     );
-    //     await userUpdate.save();
-
-    //     // Update user cache after reversion
-    //     await redisClient.set(`user:${req.user.id}`, JSON.stringify(userUpdate), 'EX', 3600).catch((err) => {
-    //       console.warn(`Redis set error for user:${req.user.id}:`, err.message);
-    //     });
-    //   }
-
-    //   // Revert admin fee if deducted
-    //   if (adminDeduction > 0) {
-    //     const adminUpdate = await Admin.findOne({ referralCode: "admin123" });
-    //     if (adminUpdate) {
-    //       adminUpdate.transactionFeeCollected = Number(
-    //         (adminUpdate.transactionFeeCollected - adminDeduction).toFixed(2)
-    //       );
-    //       await adminUpdate.save();
-
-    //       // Update admin cache after reversion
-    //       await redisClient.set(`admin:admin123`, JSON.stringify(adminUpdate), 'EX', 3600).catch((err) => {
-    //         console.warn(`Redis set error for admin:admin123:`, err.message);
-    //       });
-    //     }
-    //   }
-
-    //   // Update withdrawal to failed
-    //   if (withdrawal && withdrawal[0]) {
-    //     await Withdrawal.updateOne(
-    //       { _id: withdrawal[0]._id },
-    //       { status: "failed", error: error.message }
-    //     );
-    //   }
-
-    //   return res
-    //     .status(500)
-    //     .json(errorResponse("Withdrawal transaction failed; balance restored"));
-    // }
 
     logger.error(
       `Error in withdraw for user ${req.user.id} from ${req.body.walletType} wallet:`,
       error.message,
-      error.stack,
+      error.stack
     );
     res.status(500).json(errorResponse(error.message));
   } finally {
@@ -2353,22 +2263,22 @@ const addWalletFirstTime = async (req, res) => {
   }
 };
 
-
-
-
-
 const updateEmail = async (req, res) => {
   try {
     const { email } = req.body;
     const userId = req.user.id || req.user._id;
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email required" });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "Invalid email format" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid email format" });
     }
 
     // ✅ Check if email already used by another user
@@ -2383,11 +2293,13 @@ const updateEmail = async (req, res) => {
     const user = await User.findOneAndUpdate(
       { _id: userId, isActive: true },
       { email },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found or inactive" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found or inactive" });
     }
 
     res.status(200).json({
@@ -2395,7 +2307,6 @@ const updateEmail = async (req, res) => {
       message: "Email updated successfully",
       user,
     });
-
   } catch (error) {
     console.error("Email update error:", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -2408,12 +2319,16 @@ const addEmailFirstTime = async (req, res) => {
     const userId = req.user.id || req.user._id;
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email required" });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: "Invalid email format" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid email format" });
     }
 
     // ✅ Check if email already used by any user
@@ -2428,7 +2343,9 @@ const addEmailFirstTime = async (req, res) => {
     const user = await User.findOne({ _id: userId, isActive: true });
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (user.email && user.email !== "") {
@@ -2446,18 +2363,11 @@ const addEmailFirstTime = async (req, res) => {
       message: "Email added successfully",
       user,
     });
-
   } catch (error) {
     console.error("Add email error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
-
-
-
-
 
 module.exports = {
   requestWithdrawalOtp,
@@ -2490,6 +2400,4 @@ module.exports = {
   getDeposits,
   addEmailFirstTime,
   updateEmail,
-  
-
 };
