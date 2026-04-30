@@ -24,8 +24,7 @@ const corsOptions = {
       "https://t.me/cipera_bot/direct",
       "https://t.me/cipera_bot",
       "https://t.me",
-
-      "https://telegram-cipera.vercel.app/"    
+ "https://telegram-cipera.vercel.app"   
      
     ];
     if (!origin || allowedOrigins.includes(origin)) {
