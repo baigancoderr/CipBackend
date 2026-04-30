@@ -121,8 +121,8 @@ else {
       walletBalance: 0,
 
         wallets: {
-    referral: { amount: 1000 },
-    roi: { amount: 1000 },
+    referral: { amount: 0 },
+    roi: { amount: 0 },
   },
       totalReferrals: 0,
       referralEarnings: 0,

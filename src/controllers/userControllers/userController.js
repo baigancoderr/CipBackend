@@ -87,8 +87,12 @@ const getDashboard = async (req, res) => {
     const sgnPrice = sgnPriceDoc?.price || 0.0;
 
     // ====================== ROI TOKENS → USD CONVERSION ======================
-    const roiTokens = user.wallets?.roi?.amount || 0;
-    const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
+    // const roiTokens = user.wallets?.roi?.amount || 0;
+    // const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
+
+
+    const roiTokens = user.wallets?.roi?.amount || 0; // CIP
+const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2)); // USD
 
     const referralEarningsUsd =
       user.wallets?.referral?.amount || user.referralEarnings || 0;
@@ -130,7 +134,7 @@ const getDashboard = async (req, res) => {
       dashboard: {
         stats: [
           {
-            title: "LIVE PRICE (SGN)",
+            title: "LIVE PRICE (CIP)",
             value: `$${sgnPrice.toFixed(4)}`,
           },
           {
@@ -153,6 +157,11 @@ const getDashboard = async (req, res) => {
             title: "ROI EARNINGS",
             value: `$${roiEarningsUsd.toFixed(2)}`, // ← Now in USD
           },
+ {
+            title: "ROI (CIP) EARNINGS",
+            value: `${roiTokens.toFixed(2)}`, // ← Now in cIP
+          },
+
           {
             title: "ACTIVE PACKAGE",
             value: user.activePackage || "None",
@@ -167,7 +176,8 @@ const getDashboard = async (req, res) => {
           totalInvested: user.totalInvested || 0,
           totalEarnings: totalEarningsUsd, // ← Corrected
           dailyIncome: user.dailyIncome || 0,
-          roiBalance: roiTokens, // ← USD value
+         roiBalance: roiTokens, // CIP token
+roiBalanceUsd: roiEarningsUsd, // USD converted
           referralBalance: referralEarningsUsd,
         },
 
@@ -531,7 +541,7 @@ const withdraw = async (req, res) => {
       await session.commitTransaction();
 
       res.status(200).json(
-        successResponse("Withdrawal completed successfully", {
+        successResponse("Withdrawal completed", {
           withdrawalId: withdrawal._id,
           requestedAmount: amount,
           netAmount,
@@ -1887,7 +1897,7 @@ const createDeposit = async (req, res) => {
     const deposit = await Deposit.create({
       userId: user._id,
       amount: Number(amount),
-      coin: config.coin,
+      currency: config.coin,
       network,
       status: "initiated",
     });

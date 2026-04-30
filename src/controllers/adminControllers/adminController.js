@@ -49,7 +49,7 @@ const getAdminDashboard = async (req, res) => {
     // Total user investment (sum of totalSelfInvestment for all users)
     const totalUserInvestment = await User.aggregate([
       { $match: { role: "user" } },
-      { $group: { _id: null, total: { $sum: "$totalSelfInvestment" } } },
+      { $group: { _id: null, total: { $sum: "$totalInvested" } } },
     ]).then((result) => result[0]?.total || 0);
 
 
@@ -131,6 +131,17 @@ const getAdminDashboard = async (req, res) => {
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]).then((result) => result[0]?.total || 0);
 
+    // ✅ Pending withdrawals only
+const totalWithdrawPending = await Withdrawal.aggregate([
+  { $match: { status: "pending" } },
+  {
+    $group: {
+      _id: null,
+      total: { $sum: "$amount" },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
+
     // Total team (total users excluding admins)
     const totalTeam = totalUsers;
 
@@ -209,6 +220,42 @@ const getAdminDashboard = async (req, res) => {
       "price",
     );
 
+    // Locked Token: Sum of tokensReceived (total return tokens for all users)
+    const lockedToken = await Investment.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$totalReturn",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
+    // Claimed Token: Sum of all ROI distributions (daily claimed amounts)
+    const claimedToken = await RoiDistribution.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$dailyROI",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
+    // Fee Collected: Sum of all withdrawal fees
+    const feeCollected = await Withdrawal.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: "$withdrawalFee",
+          },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
+
 
     // Fetch 5 latest transactions (Deposit, Withdrawal requests, and Stake)
     const latestDeposits = await Deposit.find()
@@ -255,6 +302,7 @@ const getAdminDashboard = async (req, res) => {
         totalUserReferralWalletBalance,
         totalWithdrawAmount,
         totalWithdrawDone,
+        totalWithdrawPending, //added pending withdrawals
         totalTeam,
         totalAdminDirect,
         totalAdminIndirect,
@@ -263,6 +311,9 @@ const getAdminDashboard = async (req, res) => {
         totalReferralRewardDistributed,
         totalSwapedAmount,
         emgtTokenPrice,
+        lockedToken,
+        claimedToken,
+        feeCollected,
         latestTransactions: allTransactions,
         latestUsers,
       }),
@@ -272,6 +323,8 @@ const getAdminDashboard = async (req, res) => {
     res.status(500).json(errorResponse(error.message));
   }
 };
+
+
 
 // Get all users with all data including password
 const getAllUsers = async (req, res) => {

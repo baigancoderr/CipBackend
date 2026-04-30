@@ -79,7 +79,7 @@ const swapToDeposit = async (req, res) => {
     await session.commitTransaction();
 
     res.status(200).json(
-      successResponse("Wallet swapped to deposit successfully", {
+      successResponse("Wallet swapped to deposit", {
         swapId,
         swappedFrom: walletType,
         fromAmount: amount,
