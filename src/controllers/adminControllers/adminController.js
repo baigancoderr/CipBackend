@@ -49,7 +49,7 @@ const getAdminDashboard = async (req, res) => {
     // Total user investment (sum of totalSelfInvestment for all users)
     const totalUserInvestment = await User.aggregate([
       { $match: { role: "user" } },
-      { $group: { _id: null, total: { $sum: "$totalSelfInvestment" } } },
+      { $group: { _id: null, total: { $sum: "$totalInvested" } } },
     ]).then((result) => result[0]?.total || 0);
 
 
@@ -130,6 +130,17 @@ const getAdminDashboard = async (req, res) => {
       { $match: { status: "completed" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]).then((result) => result[0]?.total || 0);
+
+    // ✅ Pending withdrawals only
+const totalWithdrawPending = await Withdrawal.aggregate([
+  { $match: { status: "pending" } },
+  {
+    $group: {
+      _id: null,
+      total: { $sum: "$amount" },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
 
     // Total team (total users excluding admins)
     const totalTeam = totalUsers;
@@ -291,6 +302,7 @@ const getAdminDashboard = async (req, res) => {
         totalUserReferralWalletBalance,
         totalWithdrawAmount,
         totalWithdrawDone,
+        totalWithdrawPending, //added pending withdrawals
         totalTeam,
         totalAdminDirect,
         totalAdminIndirect,
