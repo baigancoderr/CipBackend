@@ -367,6 +367,10 @@ const withdraw = async (req, res) => {
       throw new Error("Set wallet address first");
     }
 
+    if (!ethers.utils.isAddress(user.walletAddress)) {
+      throw new Error("Invalid wallet address format. Please enter a valid Base wallet address");
+    }
+    
     if (!amount || amount <= 0) {
       throw new Error("Invalid withdrawal amount");
     }
