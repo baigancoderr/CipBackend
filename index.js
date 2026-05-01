@@ -22,6 +22,7 @@ const corsOptions = {
       "https://web.telegram.org",
       "https://cipera.net/",
       "http://app.cipera.net/",
+        "https://app.cipera.net/",
       "https://backend.cipera.net/",
       "https://admin.cipera.net/",
 
