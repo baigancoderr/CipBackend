@@ -17,8 +17,8 @@ const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
     
-       "http://localhost:5173",
-       "http://localhost:5174",
+       "https://localhost:5173",
+       "https://localhost:5174",
       "https://web.telegram.org",
       "https://cipera.net/",
       "http://app.cipera.net/",
