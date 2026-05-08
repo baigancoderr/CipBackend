@@ -2301,8 +2301,10 @@ const updateEmail = async (req, res) => {
     }
 
     // ✅ Check if email already used by another user
-    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
-    if (existingUser) {
+const existingUser = await User.findOne({
+  email: email.toLowerCase(),
+  _id: { $ne: userId },
+});    if (existingUser) {
       return res.status(400).json({
         success: false,
         message: "This email is already registered with another account",
@@ -2311,7 +2313,7 @@ const updateEmail = async (req, res) => {
 
     const user = await User.findOneAndUpdate(
       { _id: userId, isActive: true },
-      { email },
+      { email: email.toLowerCase() },
       { new: true },
     );
 
@@ -2351,7 +2353,10 @@ const addEmailFirstTime = async (req, res) => {
     }
 
     // ✅ Check if email already used by any user
-    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+const existingUser = await User.findOne({
+  email: email.toLowerCase(),
+  _id: { $ne: userId },
+});
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -2374,7 +2379,7 @@ const addEmailFirstTime = async (req, res) => {
       });
     }
 
-    user.email = email;
+    user.email = email.toLowerCase();
     await user.save();
 
     res.status(200).json({
