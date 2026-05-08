@@ -16,9 +16,8 @@ app.use(express.urlencoded({ extended: true }));
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
-    
-       "http://localhost:5173",
-       "http://localhost:5174",
+      "http://localhost:5173",
+      "http://localhost:5174",
       "https://web.telegram.org",
       "https://cipera.net/",
       "http://app.cipera.net/",
@@ -28,8 +27,7 @@ const corsOptions = {
       "https://t.me/cipera_bot/direct",
       "https://t.me/cipera_bot",
       "https://t.me",
- "https://telegram-cipera.vercel.app"   
-     
+      "https://telegram-cipera.vercel.app",
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -47,7 +45,6 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
 // app.use(cors());
-
 
 // Connect to MongoDB
 connectDB();
