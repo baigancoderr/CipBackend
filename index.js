@@ -16,11 +16,12 @@ app.use(express.urlencoded({ extended: true }));
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
-      "http://localhost:5173",
-      "http://localhost:5174",
+    
+       "http://localhost:5173",
+       "http://localhost:5174",
       "https://web.telegram.org",
       "https://cipera.net/",
-      "http://app.cipera.net/",
+        "https://app.cipera.net/",
       "https://backend.cipera.net/",
       "https://admin.cipera.net/",
 
