@@ -23,7 +23,7 @@ const corsOptions = {
       "https://cipera.net",
         "https://app.cipera.net",
       "https://backend.cipera.net",
-      "https://admin.cipera.net/",
+      "https://admin.cipera.net",
 
       "https://t.me/cipera_bot/direct",
       "https://t.me/cipera_bot",
