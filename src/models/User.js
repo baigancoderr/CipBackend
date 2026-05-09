@@ -3,38 +3,38 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     // 🔐 Telegram login
-    telegramId: {
-      type: String,
-      required: true,
-      unique: true,
-    },
+//     telegramId: {
+//       type: String,
+//       required: true,
+//       unique: true,
+//     },
 
 
-    email: {
-  type: String,
+//     email: {
+//   type: String,
  
-  sparse: true,   
-  lowercase: true,
-  trim: true,
-  default: null   
-},
+//   sparse: true,   
+//   lowercase: true,
+//   trim: true,
+//   default: null   
+// },
 
 
 
-// telegramId: {
-//     type: String,
-//     sparse: true,         
-//     unique: true,          
-//   },
+telegramId: {
+    type: String,
+    sparse: true,         
+    unique: true,          
+  },
 
   // For Web users
-  // email: {
-  //   type: String,
-  //   sparse: true,
-  //   unique: true,
-  //   lowercase: true,
-  //   trim: true,
-  // },
+  email: {
+    type: String,
+    sparse: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+  },
 
 
 
