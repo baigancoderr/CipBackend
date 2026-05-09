@@ -3,15 +3,14 @@ const Deposit = require("../../models/Deposit")
 const { distributeDailyROI } = require("../../services/roiIncomeDistributionService");
 const {checkBalanceAndProcess, updateLivePriceInDB} = require("../../services/autoProcessDepositService");
 
-// Setup daily cron for ROI distribution (runs every day at midnight, e.g., 00:00)
-cron.schedule("*/5 * * * *", async () => {
-    // cron.schedule("*/2 * * * *", async () => {
+// Setup daily cron for ROI distribution at 12:00 AM every day
+cron.schedule("0 0 * * *", async () => {
   console.log("Running daily ROI distribution cron job...");
   try {
     await distributeDailyROI();
     await checkBalanceAndProcess();
     await updateLivePriceInDB();
-    console.log("Daily ROI and Binary Income distribution completed.");
+    console.log("Daily ROI Income distribution completed.");
   } catch (error) {
     console.error("Error in daily ROI cron job:", error);
   }
