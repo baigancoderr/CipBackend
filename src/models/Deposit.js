@@ -20,17 +20,26 @@ const depositSchema = new mongoose.Schema({
   sparse: true
 },
 
-  // status: {
-  //   type: String,
-  //   enum: ["pending", "completed", "failed"],
-  //   default: "pending",
-  // },
 
-  status: {
+
+  expiresAt: {
+  type: Date,
+},
+
+status: {
   type: String,
-  enum: ["initiated", "pending", "processing", "completed", "failed"],
+  enum: [
+    "initiated",
+    "pending",
+    "processing",
+    "completed",
+    "failed",
+    "expired",
+    "late_completed",
+  ],
   default: "initiated",
 },
+
   uuid: {
     type: String,
     index: true

@@ -86,6 +86,7 @@ const getDashboard = async (req, res) => {
     const sgnPriceDoc = await Price.findOne({ currencyType: "SGN" });
     const sgnPrice = sgnPriceDoc?.price || 0.0;
 
+    
     // ====================== ROI TOKENS → USD CONVERSION ======================
     // const roiTokens = user.wallets?.roi?.amount || 0;
     // const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2));
@@ -101,6 +102,10 @@ const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2)); // USD
     const totalEarningsUsd = parseFloat(
       (referralEarningsUsd + roiEarningsUsd).toFixed(2),
     );
+
+    // ====================== USER COUNTS ======================
+const totalUsers = await User.countDocuments({});
+const activeUsers = await User.countDocuments({ isActive: true });
 
     // ====================== RECENT 5 INVESTMENTS ======================
     const recentInvestments = await Investment.find({ userId: user.userId })
@@ -170,6 +175,14 @@ const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2)); // USD
             title: "DIRECT TEAM",
             value: directReferrals.toString(),
           },
+          {
+  title: "TOTAL USERS",
+  value: totalUsers.toString(),
+},
+{
+  title: "ACTIVE USERS",
+  value: activeUsers.toString(),
+},
         ],
 
         profitTracker: {
@@ -1892,15 +1905,17 @@ const createDeposit = async (req, res) => {
     }
 
     console.log(`🚀 Creating deposit for ${userId}`);
+    const expiryTime = new Date(Date.now() + 30 * 60 * 1000);
 
     // 🧾 Step 1: Create deposit
-    const deposit = await Deposit.create({
-      userId: user._id,
-      amount: Number(amount),
-      currency: config.coin,
-      network,
-      status: "initiated",
-    });
+ const deposit = await Deposit.create({
+  userId: user._id,
+  amount: Number(amount),
+  currency: config.coin,
+  network,
+  status: "initiated",
+  expiresAt: expiryTime,
+});
 
     // 🔔 Callback URL (IMPORTANT)
     const callbackUrl = `${process.env.BASE_URL}/user/deposit/callback?secret=${process.env.CRYPTAPI_SECRET}&order_id=${deposit._id}`;
@@ -1941,16 +1956,20 @@ const createDeposit = async (req, res) => {
       uuid: deposit.uuid,
     });
 
-    return res.json({
-      success: true,
-      depositId: deposit._id,
-      deposit: {
-        address: data.address_in,
-        coin: config.coin,
-        network,
-        amount: Number(amount),
-      },
-    });
+  return res.json({
+  success: true,
+  depositId: deposit._id,
+  deposit: {
+    address: data.address_in,
+    coin: config.coin,
+    network,
+    amount: Number(amount),
+    expiresAt: deposit.expiresAt,
+  },
+});
+
+
+
   } catch (err) {
     console.error("❌ Deposit Error:", err.message);
     return res.status(500).json({
@@ -2012,16 +2031,28 @@ const depositCallback = async (req, res) => {
       return res.send("Deposit not found");
     }
 
+    // ⏰ Auto mark expired after 30 min
+
+const isLatePayment =
+  deposit.expiresAt &&
+  new Date() > deposit.expiresAt;
+
+if (isLatePayment) {
+  console.log("⚠️ Late payment received");
+}
+
     console.log("✅ MATCHED DEPOSIT:", {
       uuid: deposit.uuid,
       order_id: deposit._id,
     });
 
     // ✅ Already completed
-    if (deposit.status === "completed") {
-      return res.send("Already processed");
-    }
-
+   if (
+  deposit.status === "completed" ||
+  deposit.status === "late_completed"
+) {
+  return res.send("Already processed");
+}
     // 💰 Amount check
     if (isNaN(finalAmount) || finalAmount <= 0) {
       return res.send("Invalid amount");
@@ -2047,11 +2078,16 @@ const depositCallback = async (req, res) => {
     }
 
     // 🔒 ATOMIC LOCK (IMPORTANT)
-    const lockedDeposit = await Deposit.findOneAndUpdate(
-      { _id: deposit._id, status: { $ne: "completed" } },
-      { status: "processing" },
-      { new: true },
-    );
+  const lockedDeposit = await Deposit.findOneAndUpdate(
+  {
+    _id: deposit._id,
+    status: {
+      $nin: ["completed", "late_completed"],
+    },
+  },
+  { status: "processing" },
+  { new: true },
+);
 
     if (!lockedDeposit) {
       return res.send("Already processed");
@@ -2073,7 +2109,9 @@ const depositCallback = async (req, res) => {
     await user.save();
 
     // 🧾 Final update
-    deposit.status = "completed";
+    deposit.status = isLatePayment
+  ? "late_completed"
+  : "completed";
     deposit.transactionHash = finalTxid;
     deposit.creditedAmount = finalAmount;
     deposit.confirmations = Number(confirmations);
