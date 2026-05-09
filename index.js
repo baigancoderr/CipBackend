@@ -20,9 +20,9 @@ const corsOptions = {
        "http://localhost:5173",
        "http://localhost:5174",
       "https://web.telegram.org",
-      "https://cipera.net/",
-        "https://app.cipera.net/",
-      "https://backend.cipera.net/",
+      "https://cipera.net",
+        "https://app.cipera.net",
+      "https://backend.cipera.net",
       "https://admin.cipera.net/",
 
       "https://t.me/cipera_bot/direct",
