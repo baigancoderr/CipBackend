@@ -119,6 +119,11 @@ telegramId: {
       default: 0,
     },
 
+    totalReferralWithdrawn: {
+      type: Number,
+      default: 0,
+    },
+    
     activePackage: {
       type: Number,
       default: 0,

@@ -376,7 +376,7 @@ const withdraw = async (req, res) => {
     const userId = req.user.id;
 
     console.log(
-      `Withdrawal request: userId=${userId}, walletType=${walletType}, amount=${amount}`,
+      `Withdrawal request: userId=${userId}, walletType=${walletType}, amount=${amount}}`,
     );
 
     const user = await User.findById(userId).session(session);
@@ -393,7 +393,7 @@ const withdraw = async (req, res) => {
     if (!ethers.utils.isAddress(user.walletAddress)) {
       throw new Error("Invalid wallet address format. Please enter a valid Base wallet address");
     }
-
+    
     if (!amount || amount <= 0) {
       throw new Error("Invalid withdrawal amount");
     }
@@ -422,57 +422,22 @@ const withdraw = async (req, res) => {
       throw new Error(`Insufficient funds in ${walletType} Wallet`);
     }
 
-    // ====================== 2x TOTAL INVESTED LIMIT (Referral wallet only) ======================
-    if (walletType === "referral") {
-      const maxAllowed = Number((user.totalInvested * 2).toFixed(2));
-      const alreadyWithdrawn = Number(user.totalReferralWithdrawn || 0);
-      const remainingAllowed = Number((maxAllowed - alreadyWithdrawn).toFixed(2));
+    // Transaction charge
+    const TRANSACTION_CHARGE = ["roi", "referral"].includes(walletType)
+      ? config.TRANSACTION_CHARGE || 5
+      : 0;
 
-      if (amount > remainingAllowed) {
-        throw new Error(
-          `Maximum withdrawal limit reached for Referral (USDC) wallet. ` +
-          `2x of totalInvested = $${maxAllowed}. ` +
-          `Already withdrawn = $${alreadyWithdrawn}. ` +
-          `You can only withdraw up to $${remainingAllowed} more.`
-        );
-      }
-    }
-    // ============================================================================================
-
-    // ====================== NEW FEE LOGIC AS PER YOUR REQUIREMENT ======================
-    let feePercentage = 0;
-    let feeRemarks = "";
-
-    if (walletType === "roi") {
-      // ROI Wallet (CIP) → 5% platform fee
-      feePercentage = 5;
-      adminDeduction = Number(((amount * feePercentage) / 100).toFixed(4));
-      feeRemarks = "5% Admin Fee";
-    } 
-    else if (walletType === "referral") {
-      feePercentage = 2;
-      adminDeduction = Number(((amount * feePercentage) / 100).toFixed(4));
-      feeRemarks = `Network Fee ($${adminDeduction})`;
-    }
-    // ===================================================================================
-
+    adminDeduction = Number(((amount * TRANSACTION_CHARGE) / 100).toFixed(4));
     const netAmount = Number((amount - adminDeduction).toFixed(2));
 
     if (netAmount <= 0) {
       throw new Error("Net withdrawal amount after charges must be greater than 0");
     }
 
-    // Deduct amount from wallet
+    // Deduct amount
     wallet.amount = Number((wallet.amount - amount).toFixed(2));
 
-    // Update totalReferralWithdrawn (previous requirement)
-    if (walletType === "referral") {
-      user.totalReferralWithdrawn = Number(
-        ((user.totalReferralWithdrawn || 0) + amount).toFixed(2)
-      );
-    }
-
-    // Update admin fee collected
+    // Update admin fee
     if (adminDeduction > 0) {
       const adminCacheKey = `admin:admin123`;
       let admin = null;
@@ -500,13 +465,13 @@ const withdraw = async (req, res) => {
 
     const currencyType = walletType === "roi" ? "CIP" : "USDC";
 
-    // Create withdrawal record
+    // Create withdrawal (single document - safer)
     withdrawal = await new Withdrawal({
       userId: user._id,
       amount,
       actualPayAmount: netAmount,
       withdrawalFee: adminDeduction,
-      withdrawalFeePercentage: feePercentage,
+      withdrawalFeePercentage: TRANSACTION_CHARGE,
       walletType,
       currencyType,
       status: "pending",
@@ -514,12 +479,11 @@ const withdraw = async (req, res) => {
       requestedAmount: amount,
     }).save({ session });
 
-    // Save user changes
+    // Save user wallet changes
     await user.save({ session });
 
     // ====================== AUTO WITHDRAWAL ======================
     const AUTO_WITHDRAWAL_LIMIT = config.AUTO_WITHDRAWAL_LIMIT || 500;
-
     if (netAmount <= AUTO_WITHDRAWAL_LIMIT) {
       if (!config.ENCRYPTION_KEY || !config.ENCRYPTED_PRIVATE_KEY) {
         throw new Error("Encryption keys not configured");
@@ -536,22 +500,24 @@ const withdraw = async (req, res) => {
         walletSigner
       );
 
+      // ================== DYNAMIC TOKEN CONFIG ==================
       let tokenAddress, tokenABI, decimals;
 
       if (walletType === "roi") {
         tokenAddress = config.CIP_CONTRACT_ADDRESS;
         tokenABI = config.CIP_CONTRACT_ABI;
-        decimals = 18;
+        decimals = 18; // CIP token decimals
       } else if (currencyType === "USDC") {
-        tokenAddress = config.USDT_CONTRACT_ADDRESS;
+        tokenAddress = config.USDT_CONTRACT_ADDRESS; // or USDC_CONTRACT_ADDRESS
         tokenABI = config.USDT_CONTRACT_ABI;
-        decimals = 6;
+        decimals = 6; // USDC on Base/Sepolia
       } else {
         throw new Error(`Unsupported currencyType: ${currencyType}`);
       }
 
+      // ←←← THIS WAS THE SOURCE OF THE ERROR
       if (!tokenAddress || !tokenABI) {
-        throw new Error(`Missing config for ${currencyType}`);
+        throw new Error(`Missing config for ${currencyType} (CIP/USDC contract address or ABI)`);
       }
 
       const tokenContract = new ethers.Contract(tokenAddress, tokenABI, provider);
@@ -568,6 +534,7 @@ const withdraw = async (req, res) => {
         );
       }
 
+      // Call correct function
       let tx;
       if (walletType === "roi") {
         tx = await contract.userWithdrawCIP(user.walletAddress, amountWei);
@@ -592,7 +559,6 @@ const withdraw = async (req, res) => {
           requestedAmount: amount,
           netAmount,
           transactionCharge: adminDeduction,
-          feeRemarks,
           currencyType,
           walletType,
           status: "completed",
@@ -611,7 +577,6 @@ const withdraw = async (req, res) => {
           requestedAmount: amount,
           netAmount,
           transactionCharge: adminDeduction,
-          feeRemarks,
           currencyType,
           walletType,
           status: "pending",
