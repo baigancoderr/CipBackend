@@ -107,6 +107,29 @@ const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2)); // USD
 const totalUsers = await User.countDocuments({});
 const activeUsers = await User.countDocuments({ isActive: true });
 
+    // ====================== TOKEN SALE STATS ======================
+    const saleStats = await Investment.aggregate([
+      {
+        $match: {
+          status: "active",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+
+      
+
+          totalSoldTokens: {
+            $sum: "$tokensReceived",
+          },
+        },
+      },
+    ]);
+
+    // const totalSaleUsd = saleStats[0]?.totalSaleUsd || 0;
+    const totalSoldTokens = saleStats[0]?.totalSoldTokens || 0;
+
     // ====================== RECENT 5 INVESTMENTS ======================
     const recentInvestments = await Investment.find({ userId: user.userId })
       .sort({ createdAt: -1 })
@@ -183,6 +206,16 @@ const activeUsers = await User.countDocuments({ isActive: true });
   title: "ACTIVE USERS",
   value: activeUsers.toString(),
 },
+{
+  title: "TOKENS SOLD",
+  value: `${totalSoldTokens.toFixed(2)} CIP`,
+},
+// {
+//   title: "BURNED TOKENS",
+//   value: `${totalSaleUsd.toFixed(2)}`,
+// },
+
+
         ],
 
         profitTracker: {
