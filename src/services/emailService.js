@@ -41,7 +41,7 @@ const sendEmail = async (to, subject, templateName, data = {}) => {
     html = html.replace("{{oldWalletAddress}}", data.oldWalletAddress || "N/A");
     html = html.replace("{{newWalletAddress}}", data.newWalletAddress || "N/A");
 
-    html = html.replace("{{adminEmail}}", data.adminEmail || "support@embot.co");
+    html = html.replace("{{adminEmail}}", data.adminEmail || "support@cipera.net");
 
     html = html.replace("{{amount}}", data.amount || "N/A");
     html = html.replace("{{otp}}", data.otp || "N/A");
@@ -52,9 +52,9 @@ const sendEmail = async (to, subject, templateName, data = {}) => {
 
     html = html.replace("{{timestamp}}", data.timestamp || moment().tz("Asia/Kolkata").format("HH:mm:ss A, DD MMMM YYYY"));
 
-    html = html.replace(/{{projectName}}/g, process.env.PROJECT_NAME || "urbanrwa.io");
-    html = html.replace(/{{supportEmail}}/g, process.env.SUPPORT_EMAIL || "support@urbanrwa.io");
-    html = html.replace(/{{websiteLink}}/g, process.env.WEBSITE_URL || "https://urbanrwa.io");
+    html = html.replace(/{{projectName}}/g, process.env.PROJECT_NAME || "cipera.net");
+    html = html.replace(/{{supportEmail}}/g, process.env.SUPPORT_EMAIL || "support@cipera.net");
+    html = html.replace(/{{websiteLink}}/g, process.env.WEBSITE_URL || "https://cipera.net");
 
     const info = await transporter.sendMail({
       from: process.env.EMAIL_FROM,
