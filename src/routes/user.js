@@ -81,7 +81,7 @@ router.post("/telegram-login", telegramLogin);
 
 router.get("/me", authMiddleware(), getMe);
 
-// 👤 Profile
+// 👤 Profileee
 // router.get("/profile/:telegramId", getUserProfile);
 router.get("/profile", authMiddleware(), getUserProfile);
 
