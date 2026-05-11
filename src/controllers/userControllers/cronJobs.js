@@ -8,9 +8,20 @@ cron.schedule("0 0 * * *", async () => {
   console.log("Running daily ROI distribution cron job...");
   try {
     await distributeDailyROI();
+    console.log("Daily ROI Income distribution completed.");
+  } catch (error) {
+    console.error("Error in daily ROI cron job:", error);
+  }
+});
+
+// run every 1 minute to check balance and update live price in DB
+
+cron.schedule(" */5 * * * * *", async () => {    
+  console.log("Running balance check and live price update cron job...");
+  try {
     await checkBalanceAndProcess();
     await updateLivePriceInDB();
-    console.log("Daily ROI Income distribution completed.");
+    console.log("Balance check and live price update completed.");
   } catch (error) {
     console.error("Error in daily ROI cron job:", error);
   }

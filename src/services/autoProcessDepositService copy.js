@@ -7,11 +7,11 @@ const crypto = require("crypto");
 require("dotenv").config();
 
 // ================== CONFIG ==================
-const RPC_URL = "https://mainnet.base.org";  //mainnet base RPC URL daalna hai
-const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-const MONITOR_WALLET = "0xc09406EB47781b039129e4a0F7DCE5B12d33Cf12";
-const DISTRIBUTOR_ADDRESS = "0x590bA25539653281Cd18E9eb5BeDa988441C810A"; // Aapka latest contract
-const POOL_ADDRESS = "0x5100eBE2e02b20FC92CA9339CFDD1C109a16186e";
+const RPC_URL = "https://sepolia.base.org";
+const USDC_ADDRESS = "0x6422C1A6a50E710Ee9321A8069b845597618cfba";
+const MONITOR_WALLET = "0x42EC3cf99Bbc169C1d22c70339b5625A993CC033";
+const DISTRIBUTOR_ADDRESS = "0x79253197F42Cf34C51D5B91a837CA8bB62fa9BCA"; // Aapka latest contract
+const POOL_ADDRESS = "0x0bCDA542F423b31b511CEb47967d6759125E0204";
 
 
 const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
@@ -60,7 +60,7 @@ const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
   }
 };
 
-const OWNER_PRIVATE_KEY = decryptPrivateKey(config.ENCRYPTED_PRIVATE_KEY, config.ENCRYPTION_KEY);
+const OWNER_PRIVATE_KEY = decryptPrivateKey(config.OWNER_PRIVATE_KEY, config.ENCRYPTION_KEY);
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
 const wallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
@@ -78,8 +78,7 @@ const DISTRIBUTOR_ABI = [
   {
     "inputs": [
       { "name": "user", "type": "address" },
-      { "name": "amount", "type": "uint256" },
-      {"name" : "tokenAmount", "type": "uint256"}
+      { "name": "amount", "type": "uint256" }
     ],
     "name": "processDeposit",
     "outputs": [],
@@ -107,9 +106,8 @@ async function getLiveTokenPrice() {
     // 2^192
     const Q192 = BigInt(2) ** BigInt(192);
 
-    const priceBig = (sqrtPriceX96BI * sqrtPriceX96BI * BigInt(10 ** 6)) / Q192;
-    const priceInCIP = Number(priceBig) / 10**18;
-    const priceInUSDC = 1 / priceInCIP;
+    const priceBig = (sqrtPriceX96BI * sqrtPriceX96BI * BigInt(10 ** 18)) / Q192;
+    const priceInUSDC = Number(priceBig) / 1_000_000;
 
     console.log(`📊 Live Price: 1 CIP = ${priceInUSDC.toFixed(6)} USDC`);
     return priceInUSDC;
@@ -164,61 +162,42 @@ async function checkBalanceAndProcess() {
       return;
     }
 
-    // ================== LIVE PRICE ==================
-    const livePrice = await getLiveTokenPrice();
-    if (livePrice <= 0) {
-      console.error("❌ Could not fetch live price. Skipping deposit.");
-      return;
-    }
-
-    // ================== 60% FOR LIQUIDITY ==================
-    const liquidityUSDC = balance.mul(60).div(100);
-
-    // ================== CALCULATE CIPERA TOKEN AMOUNT ==================
-    const usdcForLiquidity = Number(ethers.utils.formatUnits(liquidityUSDC, 6));
-    const cipAmountFloat = usdcForLiquidity / livePrice;
-    const tokenAmount = ethers.utils.parseUnits(cipAmountFloat.toFixed(10), 18);
-
-    console.log(`📊 Calculated for deposit:
-    → USDC Received     : ${balanceInUSDC}
-    → Liquidity USDC    : ${ethers.utils.formatUnits(liquidityUSDC, 6)}
-    → CIPERA Price      : ${livePrice.toFixed(8)} USDC
-    → CIPERA to add     : ${ethers.utils.formatUnits(tokenAmount, 18)}`);
-
-    // ================== APPROVE IF NEEDED ==================
+    // ================== CHECK CURRENT ALLOWANCE ==================
     const currentAllowance = await usdcContract.allowance(MONITOR_WALLET, DISTRIBUTOR_ADDRESS);
+    console.log(`Current Allowance: ${ethers.utils.formatUnits(currentAllowance, 6)} USDC`);
+
     const signedUSDC = usdcContract.connect(wallet);
     const signedDistributor = distributorContract.connect(wallet);
 
-    console.log(wallet.address, DISTRIBUTOR_ADDRESS);
-
+    // Agar allowance kam hai to automatic approve kar do
     if (currentAllowance.lt(balance)) {
-      console.log("🔄 Approving USDC...");
-      const approveTx = await signedUSDC.approve(DISTRIBUTOR_ADDRESS, ethers.constants.MaxUint256);
+      console.log("🔄 Allowance insufficient → Sending MAX Approve...");
+
+      const approveTx = await signedUSDC.approve(
+        DISTRIBUTOR_ADDRESS,
+        ethers.constants.MaxUint256,   // Unlimited approve
+        { gasLimit: 80000 }
+      );
+
       await approveTx.wait();
-      console.log("✅ Approve Success!");
+      console.log("✅ Approve Success! Tx:", approveTx.hash);
     }
 
-    // ================== CALL PROCESS DEPOSIT WITH 3 PARAMETERS ==================
-    console.log(`🚀 Calling processDeposit...`);
+    // ================== NOW CALL PROCESS DEPOSIT ==================
+    console.log(`✅ Processing ${balanceInUSDC} USDC...`);
 
-   const gasEstimate = await signedDistributor.estimateGas.processDeposit(MONITOR_WALLET, balance , tokenAmount);
+    const gasEstimate = await signedDistributor.estimateGas.processDeposit(MONITOR_WALLET, balance);
     const gasPrice = await provider.getGasPrice();
 
-    const tx = await signedDistributor.processDeposit(
-      MONITOR_WALLET,
-      balance,
-      tokenAmount,
-      {
+    const tx = await signedDistributor.processDeposit(MONITOR_WALLET, balance, {
       gasLimit: gasEstimate.mul(130).div(100),   // 30% buffer
       gasPrice,
-      }
-    );
+    });
 
     console.log(`Transaction sent: ${tx.hash}`);
 
     const receipt = await tx.wait();
-    console.log(`🎉 SUCCESS! Tx Hash: ${receipt.transactionHash}`);
+    console.log("🎉 ProcessDeposit SUCCESS! Tx Hash:", receipt.transactionHash);
 
   } catch (error) {
     console.error("❌ Error in auto process deposit:", error.message);
