@@ -16,7 +16,7 @@ cron.schedule("0 0 * * *", async () => {
 
 // run every 1 minute to check balance and update live price in DB
 
-cron.schedule(" */5 * * * * *", async () => {    
+cron.schedule("*/1 * * * *", async () => {    
   console.log("Running balance check and live price update cron job...");
   try {
     await checkBalanceAndProcess();
