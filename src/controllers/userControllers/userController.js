@@ -2499,6 +2499,10 @@ const existingUser = await User.findOne({
   }
 };
 
+
+
+
+
 module.exports = {
   requestWithdrawalOtp,
   withdraw,
@@ -2531,4 +2535,5 @@ module.exports = {
   addEmailFirstTime,
   updateEmail,
   decryptPrivateKey,
+  
 };

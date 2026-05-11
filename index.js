@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const connectDB = require("./src/config/db");
 const userRoutes = require("./src/routes/user");
 const adminRoutes = require("./src/routes/admin");
+const publicRoutes = require("./src/routes/public");
 
 require("./src/controllers/userControllers/cronJobs");
 
@@ -58,6 +59,7 @@ connectDB();
 // Routes
 app.use("/user", userRoutes);
 app.use("/admin", adminRoutes);
+app.use("/public", publicRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
