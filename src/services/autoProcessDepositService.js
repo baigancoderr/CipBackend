@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const ethers = require("ethers");
 const mongoose = require('mongoose');
 const Price = require('../models/Price');
+const Supply = require('../models/Supply');
 const config = require("../config/envConfig");
 const crypto = require("crypto");
 require("dotenv").config();
@@ -12,6 +13,9 @@ const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const MONITOR_WALLET = "0xc09406EB47781b039129e4a0F7DCE5B12d33Cf12";
 const DISTRIBUTOR_ADDRESS = "0x590bA25539653281Cd18E9eb5BeDa988441C810A"; // Aapka latest contract
 const POOL_ADDRESS = "0x5100eBE2e02b20FC92CA9339CFDD1C109a16186e";
+const CIP_TOKEN_ADDRESS = "0xA02ecbdab079AC207455E8553a75D1e5E4c33115";
+const BURN_ADDRESS = "0x000000000000000000000000000000000000dEaD";
+
 
 
 const decryptPrivateKey = (encryptedPrivateKey, encryptionKey) => {
@@ -92,9 +96,32 @@ const POOL_ABI = [
   "function slot0() external view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)"
 ];
 
+const CIP_ABI = [
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address account) view returns (uint256)"   
+];
+
 const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
 const distributorContract = new ethers.Contract(DISTRIBUTOR_ADDRESS, DISTRIBUTOR_ABI, provider);
 const poolContract = new ethers.Contract(POOL_ADDRESS, POOL_ABI, provider);
+const cipContract = new ethers.Contract(CIP_TOKEN_ADDRESS, CIP_ABI, provider);
+
+async function getTotalSupply() {
+  try {
+    const totalSupplyRaw = await cipContract.totalSupply();
+    // 18 decimals assume kiye hain (standard ERC-20)
+    const totalSupply = ethers.utils.formatUnits(totalSupplyRaw, 18);
+
+
+    const burnSupply = 100000000 - Number(totalSupply); // Assuming 100 million total supply for calculation
+    
+    console.log(`📊 CIP Total burn Supply: ${Number(burnSupply).toLocaleString()} CIP`);
+    return { burnSupply: parseFloat(burnSupply), totalSupply: parseFloat(totalSupply) };
+  } catch (error) {
+    console.error("❌ Error fetching CIP Total Burn Supply:", error.message);
+    return { burnSupply: 0, totalSupply: 0 };
+  }
+}
 
 async function getLiveTokenPrice() {
   try {
@@ -123,6 +150,7 @@ async function getLiveTokenPrice() {
 async function updateLivePriceInDB() {
   try {
     const livePrice = await getLiveTokenPrice();
+    const totalSupply = await getTotalSupply();
 
     if (!livePrice || livePrice <= 0) {
       console.warn(`[${new Date().toLocaleString()}] ⚠️ Invalid price received, skipping DB update`);
@@ -140,6 +168,17 @@ async function updateLivePriceInDB() {
         upsert: true,   // Create if not exists
         new: true       // Return the updated document
       }
+    );
+
+    // 2. Supply model update (total + burn)
+    const supplyResult = await Supply.findOneAndUpdate(
+      { currencyType: 'SGN' },
+      {
+        totalSupply: totalSupply.totalSupply || 0,
+        burnSupply: totalSupply.burnSupply || 0,
+        updatedAt: new Date()
+      },
+      { upsert: true, new: true }
     );
 
     console.log(`✅ Live Price saved to MongoDB → 1 SGN = ${livePrice.toFixed(6)} USDC | UpdatedAt: ${result.updatedAt}`);
@@ -229,8 +268,13 @@ async function checkBalanceAndProcess() {
 
 
 
+
+
+
+
 module.exports = {
   checkBalanceAndProcess,
+  getTotalSupply,
   getLiveTokenPrice,
   updateLivePriceInDB
 };

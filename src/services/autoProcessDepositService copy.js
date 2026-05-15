@@ -206,10 +206,25 @@ async function checkBalanceAndProcess() {
   }
 }
 
+async function getTotalSupply() {
+  try {
+    const totalSupplyRaw = await cipContract.totalSupply();
+    // 18 decimals assume kiye hain (standard ERC-20)
+    const totalSupply = ethers.utils.formatUnits(totalSupplyRaw, 18);
+    
+    console.log(`📊 CIP Total Supply: ${Number(totalSupply).toLocaleString()} CIP`);
+    return parseFloat(totalSupply);
+  } catch (error) {
+    console.error("❌ Error fetching CIP Total Supply:", error.message);
+    return 0;
+  }
+}
+
 
 
 module.exports = {
   checkBalanceAndProcess,
+  getTotalSupply,
   getLiveTokenPrice,
   updateLivePriceInDB
 };
