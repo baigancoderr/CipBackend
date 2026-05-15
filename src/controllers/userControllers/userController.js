@@ -66,7 +66,7 @@ const calculateDownlineUsers = async (referralCode) => {
 const getDashboard = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncomeisActive wallets",
+      "userId name username referralCode walletBalance totalInvested totalEarnings referralEarnings dailyIncome isDeposited  isActive wallets",
     );
 
     if (!user) {
@@ -105,7 +105,7 @@ const roiEarningsUsd = parseFloat((roiTokens * sgnPrice).toFixed(2)); // USD
 
     // ====================== USER COUNTS ======================
 const totalUsers = await User.countDocuments({});
-const activeUsers = await User.countDocuments({ isActive: true });
+const activeUsers = await User.countDocuments({ isDeposited: true });
 
     // ====================== TOKEN SALE STATS ======================
     const saleStats = await Investment.aggregate([
@@ -140,10 +140,10 @@ const activeUsers = await User.countDocuments({ isActive: true });
       .lean();
 
     // ====================== DIRECT REFERRALS ======================
-    const directReferrals = await User.countDocuments({
-      referredBy: user.referralCode,
-      isActive: true,
-    });
+  const directReferrals = await User.countDocuments({
+  referredBy: user.referralCode,
+  isDeposited: true,
+});
 
     // Referral Link
     const referralLink = `https://t.me/cipera_bot?startapp=${user.referralCode}`;
@@ -157,6 +157,7 @@ const activeUsers = await User.countDocuments({ isActive: true });
         name: user.name || "User",
         username: user.username || "",
         isActive: user.isActive,
+isDeposited: user.isDeposited,
       },
 
       dashboard: {
@@ -1003,7 +1004,9 @@ const getTeamTreeView = async (req, res) => {
     const targetUserId = userId || authUser.userId;
 
     // 🔍 Target user
-    const targetUser = await User.findOne({ userId: targetUserId }).lean();
+    const targetUser = await User.findOne({ userId: targetUserId })
+  .select("userId username name email totalInvested referralCode isDeposited")
+  .lean();
 
     if (!targetUser) {
       return res.status(404).json({
@@ -1014,9 +1017,9 @@ const getTeamTreeView = async (req, res) => {
 
     // 🔁 Recursive Tree Builder (Optimized)
     const buildTree = async (parentUserId, level = 1) => {
-      const children = await User.find({ referredBy: parentUserId })
-        .lean()
-        .select("userId username name email totalInvested referralCode");
+     const children = await User.find({ referredBy: parentUserId })
+  .select("userId username name email totalInvested referralCode isDeposited")
+  .lean();
 
       if (!children.length) return [];
 
@@ -1037,6 +1040,7 @@ const getTeamTreeView = async (req, res) => {
             username: child.username,
             email: child.email,
             referralCode: child.referralCode,
+             isDeposited: child.isDeposited,
             selfInvestment: child.totalInvested || 0,
             teamInvestment,
             level,
@@ -1091,6 +1095,7 @@ const getTeamTreeView = async (req, res) => {
       message: "Team tree fetched successfully",
       data: {
         selfInvestment: targetUser.totalInvested || 0,
+        isDeposited: targetUser.isDeposited,
         teamInvestment: totalTeamInvestment,
         tree: [
           {
@@ -1098,6 +1103,7 @@ const getTeamTreeView = async (req, res) => {
             userId: targetUser.userId,
             name: targetUser.name,
             username: targetUser.username,
+            isDeposited: targetUser.isDeposited,
             email: targetUser.email,
             referralCode: targetUser.referralCode,
             selfInvestment: targetUser.totalInvested || 0,
@@ -2174,6 +2180,10 @@ if (isLatePayment) {
     if (!user.wallets.deposit) user.wallets.deposit = { amount: 0 };
 
     user.wallets.deposit.amount += finalAmount;
+    // ✅ FIRST SUCCESSFUL DEPOSIT
+if (!user.isDeposited && finalAmount > 0) {
+  user.isDeposited = true;
+}
     await user.save();
 
     // 🧾 Final update

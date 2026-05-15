@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-// const { telegramLogin ,getMe } = require("../controllers/userControllers/auth");
-const {
-  getMe,
-  webRegisterOrLogin,
-} = require("../controllers/userControllers/auth1");
+const { telegramLogin ,getMe } = require("../controllers/userControllers/auth");
+// const {
+//   getMe,
+//   webRegisterOrLogin,
+// } = require("../controllers/userControllers/auth1");
 
 const {
   getDashboard,
@@ -76,8 +76,8 @@ router.options("/contactformmail", (req, res) => {
 });
 
 // 🔥 Telegram Login
-// router.post("/telegram-login", telegramLogin);
-router.post("/web-register", webRegisterOrLogin);
+router.post("/telegram-login", telegramLogin);
+// router.post("/web-register", webRegisterOrLogin);
 
 router.get("/me", authMiddleware(), getMe);
 
