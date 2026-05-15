@@ -56,25 +56,49 @@ const swapToDeposit = async (req, res) => {
       user.wallets.roi.amount = Number((user.wallets.roi.amount - amount).toFixed(8));
     }
 
-    // Add to deposit wallet
-    user.wallets.deposit.amount = Number((user.wallets.deposit.amount + swappedAmountUSD).toFixed(2));
+    // ====================== 2% FEE ======================
 
+const feePercentage = 2;
+
+const feeAmount = Number(
+  ((swappedAmountUSD * feePercentage) / 100).toFixed(2)
+);
+
+const finalAmount = Number(
+  (swappedAmountUSD - feeAmount).toFixed(2)
+);
+
+    // Add to deposit wallet
+user.wallets.deposit.amount = Number(
+  (user.wallets.deposit.amount + finalAmount).toFixed(2)
+);
     // Save user
     await user.save({ session });
 
     // ====================== SAVE SWAP HISTORY ======================
     const swapId = `SWP${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-    await Swap.create([{
-      userId: user.userId || user._id,
-      swapId,
-      fromWallet: walletType,
-      toWallet: "deposit",
-      fromAmount: amount,
-      toAmount: swappedAmountUSD,
-      priceUsed,
-      status: "completed",
-    }], { session });
+   await Swap.create([{
+  userId: user.userId || user._id,
+  swapId,
+  fromWallet: walletType,
+  toWallet: "deposit",
+
+  fromAmount: amount,
+
+  // before fee
+  toAmount: swappedAmountUSD,
+
+  // fee details
+  feePercentage,
+  feeAmount,
+
+  // after fee
+  finalAmount,
+
+  priceUsed,
+  status: "completed",
+}], { session });
 
     await session.commitTransaction();
 
@@ -83,7 +107,10 @@ const swapToDeposit = async (req, res) => {
         swapId,
         swappedFrom: walletType,
         fromAmount: amount,
-        toAmount: swappedAmountUSD,
+       toAmount: swappedAmountUSD,
+feePercentage,
+feeAmount,
+finalAmount,
         priceUsed,
         currentDepositBalance: user.wallets.deposit.amount,
       })
@@ -166,22 +193,54 @@ const getAllSwapHistory = async (req, res) => {
 
     const totalCount = await Swap.countDocuments(query);
 
-    res.status(200).json(
-      successResponse("All users swap history retrieved successfully", {
-        swaps,
-        pagination: {
-          total: totalCount,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(totalCount / limit),
-        },
-      })
-    );
+    // ====================== TOTAL FEE COLLECTION ======================
+
+const feeResult = await Swap.aggregate([
+  {
+    $match: query
+  },
+  {
+    $group: {
+      _id: null,
+      totalFeeCollected: {
+        $sum: "$feeAmount"
+      }
+    }
+  }
+]);
+
+const totalFeeCollected =
+  feeResult[0]?.totalFeeCollected || 0;
+
+   res.status(200).json(
+  successResponse("All users swap history retrieved successfully", {
+    swaps,
+
+    pagination: {
+      total: totalCount,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(totalCount / limit),
+    },
+
+    // ======================
+    // TOTAL FEE COLLECTED
+    // ======================
+
+    totalFeeCollected: Number(
+      totalFeeCollected.toFixed(2)
+    ),
+
+  })
+);
   } catch (error) {
     console.error("Get all swap history error:", error);
     res.status(500).json(errorResponse(error.message));
   }
 };
+
+
+
 
 module.exports = {
   swapToDeposit,

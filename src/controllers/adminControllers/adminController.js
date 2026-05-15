@@ -126,21 +126,14 @@ const getAdminDashboard = async (req, res) => {
     ]).then((result) => result[0]?.total || 0);
 
     // Total withdraw done (sum of completed Withdrawal amounts)
-    const totalWithdrawDone = await Withdrawal.aggregate([
-      { $match: { status: "completed" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]).then((result) => result[0]?.total || 0);
+  const totalWithdrawDone = await Withdrawal.countDocuments({
+  status: "completed",
+});
 
     // ✅ Pending withdrawals only
-const totalWithdrawPending = await Withdrawal.aggregate([
-  { $match: { status: "pending" } },
-  {
-    $group: {
-      _id: null,
-      total: { $sum: "$amount" },
-    },
-  },
-]).then((result) => result[0]?.total || 0);
+const totalWithdrawPending = await Withdrawal.countDocuments({
+  status: "pending",
+});
 
     // Total team (total users excluding admins)
     const totalTeam = totalUsers;
@@ -157,17 +150,17 @@ const totalWithdrawPending = await Withdrawal.aggregate([
     });
 
     // Total swap charge collected (sum of swap fees from Swap records)
-    const totalSwapChargeCollected = await Swap.aggregate([
-      { $match: { status: "completed" } },
-      {
-        $group: {
-          _id: null,
-          total: {
-            $sum: "$swapDetails.fee",
-          },
-        },
+ const totalSwapChargeCollected = await Swap.aggregate([
+  { $match: { status: "completed" } },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$feeAmount",
       },
-    ]).then((result) => result[0]?.total || 0);
+    },
+  },
+]).then((result) => result[0]?.total || 0);
 
     const totalTransactionChargeCollected = await Withdrawal.aggregate([
       { $match: { status: "completed" } },
@@ -181,17 +174,93 @@ const totalWithdrawPending = await Withdrawal.aggregate([
       },
     ]).then((result) => result[0]?.total || 0);
 
-    const totalSwapedAmount = await Swap.aggregate([
-      { $match: { status: "completed" } },
-      {
-        $group: {
-          _id: null,
-          total: {
-            $sum: "$swapDetails.originalAmount",
-          },
-        },
+    // ====================== REFERRAL WITHDRAW FEE ======================
+
+const totalReferralWithdrawFee = await Withdrawal.aggregate([
+  {
+    $match: {
+      status: "completed",
+      walletType: "referral",
+    },
+  },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$withdrawalFee",
       },
-    ]).then((result) => result[0]?.total || 0);
+    },
+  },
+]).then((result) => result[0]?.total || 0);
+
+// ====================== ROI WITHDRAW FEE ======================
+
+const totalROIWithdrawFee = await Withdrawal.aggregate([
+  {
+    $match: {
+      status: "completed",
+      walletType: "roi",
+    },
+  },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$withdrawalFee",
+      },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
+
+// ====================== REFERRAL SWAP FEE ======================
+
+const totalReferralSwapFee = await Swap.aggregate([
+  {
+    $match: {
+      status: "completed",
+      fromWallet: "referral",
+    },
+  },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$feeAmount",
+      },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
+
+// ====================== ROI SWAP FEE ======================
+
+const totalROISwapFee = await Swap.aggregate([
+  {
+    $match: {
+      status: "completed",
+      fromWallet: "roi",
+    },
+  },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$feeAmount",
+      },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
+
+  const totalSwapedAmount = await Swap.aggregate([
+  { $match: { status: "completed" } },
+  {
+    $group: {
+      _id: null,
+      total: {
+        $sum: "$toAmount",
+      },
+    },
+  },
+]).then((result) => result[0]?.total || 0);
 
     const totalRoiDistributed = await RoiDistribution.aggregate([
       {
@@ -307,6 +376,10 @@ const totalWithdrawPending = await Withdrawal.aggregate([
         totalAdminDirect,
         totalAdminIndirect,
         totalTransactionChargeCollected,
+        totalReferralWithdrawFee,
+totalROIWithdrawFee,
+totalReferralSwapFee,
+    totalROISwapFee,
         totalRoiDistributed,
         totalReferralRewardDistributed,
         totalSwapedAmount,

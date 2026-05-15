@@ -28,6 +28,24 @@ const swapSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+
+
+feePercentage: {
+  type: Number,
+  default: 2,
+},
+
+feeAmount: {
+  type: Number,
+  default: 0,
+},
+
+finalAmount: {
+  type: Number,
+  default: 0,
+},
+
+
   priceUsed: {           // only filled when swapping from ROI wallet
     type: Number,
   },
