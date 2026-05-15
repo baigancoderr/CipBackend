@@ -483,7 +483,7 @@ const withdraw = async (req, res) => {
       feeRemarks = "5% Admin Fee";
     } 
     else if (walletType === "referral") {
-      feePercentage = 2;
+      feePercentage = 0.1;
       adminDeduction = Number(((amount * feePercentage) / 100).toFixed(4));
       feeRemarks = `Network Fee ($${adminDeduction})`;
     }

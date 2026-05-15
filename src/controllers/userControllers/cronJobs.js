@@ -1,7 +1,7 @@
 const cron = require("node-cron");
 const Deposit = require("../../models/Deposit") 
 const { distributeDailyROI } = require("../../services/roiIncomeDistributionService");
-const {checkBalanceAndProcess, updateLivePriceInDB} = require("../../services/autoProcessDepositService");
+const {checkBalanceAndProcess, updateLivePriceInDB } = require("../../services/autoProcessDepositService");
 
 // Setup daily cron for ROI distribution at 12:00 AM every day
 cron.schedule("0 0 * * *", async () => {
