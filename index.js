@@ -30,6 +30,8 @@ const corsOptions = {
       "https://t.me/cipera_bot",
       "https://t.me",
       "https://telegram-cipera.vercel.app",
+      "https://merabot.vercel.app",
+      "https://cipbackend-1.onrender.com",
     ];
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
