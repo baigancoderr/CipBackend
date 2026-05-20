@@ -72,11 +72,18 @@ if (userCount === 0) {
 // ✅ OTHER USERS
 else {
   if (!referralCode) {
-    return res.status(200).json({
-      success: false,
-      isNewUser: true,
-      message: "Referral required",
-    });
+    // return res.status(200).json({
+    //   success: false,
+    //   isNewUser: true,
+    //   message: "Referral required",
+    // });
+
+       return res.status(200).json({
+  success: false,
+  isNewUser: true,
+  needsReferral: true,
+  message: "Referral required",
+});
   }
 
   if (!/^CPR[A-Z0-9]{6}$/.test(referralCode)) {
